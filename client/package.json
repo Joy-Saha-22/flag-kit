@@ -1,0 +1,7 @@
+{
+  "name": "@flagkit/client",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "FlagKit dashboard (not implemented in the data-layer slice)"
+}

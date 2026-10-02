@@ -1,0 +1,7 @@
+{
+  "name": "flagkit-sdk",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "FlagKit SDK (not implemented in the data-layer slice)"
+}

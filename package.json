@@ -1,0 +1,21 @@
+{
+  "name": "flag-kit",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "workspaces": [
+    "server",
+    "client",
+    "sdk",
+    "packages/*"
+  ],
+  "scripts": {
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "seed": "npm run seed -w @flagkit/server",
+    "test": "npm test --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@flagkit/server",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "seed": "node src/scripts/seed.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.7",
+    "ioredis": "^5.4.2",
+    "mongoose": "^8.9.5",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8"
+  }
+}

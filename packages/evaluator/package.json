@@ -1,0 +1,7 @@
+{
+  "name": "@flagkit/evaluator",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Pure flag evaluation (not implemented in the data-layer slice)"
+}
