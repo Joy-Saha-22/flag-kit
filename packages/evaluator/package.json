@@ -3,5 +3,16 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
-  "description": "Pure flag evaluation (not implemented in the data-layer slice)"
+  "description": "Pure flag evaluation: targeting rules and deterministic percentage rollouts",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8"
+  }
 }
