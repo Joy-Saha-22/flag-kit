@@ -24,6 +24,19 @@ function notPlaceholder(value) {
   return !PLACEHOLDER_FRAGMENTS.some((fragment) => lowered.includes(fragment));
 }
 
+/**
+ * Split a comma-separated list of allowed browser origins.
+ *
+ * @param {string} value
+ * @returns {string[]}
+ */
+export function parseOrigins(value) {
+  return value
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+}
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
@@ -54,6 +67,23 @@ const envSchema = z.object({
     .refine((value) => !/^(secret|password|jwt_secret)+$/i.test(value), {
       message: 'JWT_SECRET is too weak',
     }),
+  // Comma-separated browser origins allowed to call the dashboard API.
+  CORS_ORIGINS: z
+    .string()
+    .default('http://localhost:5173')
+    .refine(
+      (value) => {
+        const origins = parseOrigins(value);
+        return origins.length > 0 && origins.every((origin) => /^https?:\/\/[^\s/*]+$/.test(origin));
+      },
+      { message: 'CORS_ORIGINS must be a comma-separated list of origins like https://app.example.com (no paths, no wildcards)' },
+    ),
+  JWT_TTL_SECONDS: z.coerce.number().int().min(60).max(60 * 60 * 24 * 30).default(60 * 60 * 8),
+  BCRYPT_COST: z.coerce.number().int().min(4).max(15).default(12),
+  JSON_BODY_LIMIT: z
+    .string()
+    .regex(/^\d+(kb|mb)$/i, 'JSON_BODY_LIMIT must look like 100kb or 1mb')
+    .default('100kb'),
 });
 
 const seedEnvSchema = envSchema.extend({
