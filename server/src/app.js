@@ -5,21 +5,25 @@ import cookieParser from 'cookie-parser';
 import { parseOrigins } from './env.js';
 import { AppError, createErrorHandler } from './errors.js';
 import { logger as defaultLogger } from './logger.js';
+import { createFlagSchemas } from './flags/schemas.js';
+import { createRulesetSync } from './flags/rulesetSync.js';
 import { createLoadProject } from './middleware/project.js';
 import { createRequireAuth } from './middleware/auth.js';
 import { requestId } from './middleware/requestId.js';
 import { requireCustomHeader } from './middleware/requireCustomHeader.js';
+import { createAuditRouter } from './routes/audit.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createEnvironmentsRouter } from './routes/environments.js';
+import { createFlagsRouter } from './routes/flags.js';
 import { createProjectsRouter } from './routes/projects.js';
 
 /**
  * Build the Express app. It does not connect to anything: stores and the Redis
  * client are passed in, which is what lets tests run without a database.
  *
- * @param {{ env: any, userStore: any, projectStore?: any, auditStore?: any, cache?: any, logger?: any }} deps
+ * @param {{ env: any, userStore: any, projectStore?: any, flagStore?: any, auditStore?: any, cache?: any, publisher?: any, logger?: any }} deps
  */
-export function createApp({ env, userStore, projectStore, auditStore, cache, logger = defaultLogger }) {
+export function createApp({ env, userStore, projectStore, flagStore, auditStore, cache, publisher, logger = defaultLogger }) {
   const app = express();
   app.disable('x-powered-by');
 
@@ -49,6 +53,14 @@ export function createApp({ env, userStore, projectStore, auditStore, cache, log
 
   const requireAuth = createRequireAuth({ env, userStore });
   const loadProject = createLoadProject({ projectStore });
+  const schemas = createFlagSchemas(env);
+  const sync = createRulesetSync({
+    flagStore,
+    cache,
+    publisher,
+    logger,
+    ttlSeconds: env.RULESET_CACHE_TTL_SECONDS,
+  });
 
   // Dashboard API: cookie auth, so state-changing calls need the custom header.
   app.use('/api', requireCustomHeader);
@@ -58,7 +70,8 @@ export function createApp({ env, userStore, projectStore, auditStore, cache, log
   // Everything under /api/projects/:pid: signed in, member of the project, role set on req.
   const projectScope = Router();
   projectScope.use('/environments', createEnvironmentsRouter({ env, projectStore, auditStore, cache, logger }));
-  // Flag routes are added to projectScope in the next piece.
+  projectScope.use('/flags', createFlagsRouter({ env, projectStore, flagStore, auditStore, sync, schemas, logger }));
+  projectScope.use('/audit', createAuditRouter({ auditStore, schemas }));
   app.use('/api/projects/:pid', requireAuth, loadProject, projectScope);
 
   app.use((req, res, next) => {

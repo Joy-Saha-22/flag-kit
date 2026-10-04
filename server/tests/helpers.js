@@ -42,19 +42,69 @@ export function memoryAuditStore() {
   return {
     records,
     async record(entry) {
-      records.push(entry);
+      records.push({ id: newId(), ts: new Date(), ...entry });
+    },
+    async list({ projectId, flagKey, envKey, before, limit }) {
+      return records
+        .filter((r) => r.projectId === projectId)
+        .filter((r) => !flagKey || r.flagKey === flagKey)
+        .filter((r) => !envKey || r.envKey === envKey)
+        .filter((r) => !before || r.ts < new Date(before))
+        .reverse()
+        .slice(0, limit)
+        .map((r) => ({
+          id: r.id,
+          action: r.action,
+          flagKey: r.flagKey ?? null,
+          envKey: r.envKey ?? null,
+          before: r.before ?? null,
+          after: r.after ?? null,
+          ts: r.ts,
+          actor: { id: r.actorId, name: null, email: null },
+        }));
     },
   };
 }
 
 export function memoryCache({ fail = false } = {}) {
+  const boom = () => new Error('redis is down (redis://user:secret@host:6379)');
   return {
     deleted: [],
+    store: new Map(),
     async del(key) {
       if (fail) {
-        throw new Error('redis is down (redis://user:secret@host:6379)');
+        throw boom();
       }
       this.deleted.push(key);
+      this.store.delete(key);
+      return 1;
+    },
+    // Mirrors the compare-and-set script: write only if newer than what is stored.
+    async eval(script, numKeys, key, json, version) {
+      if (fail) {
+        throw boom();
+      }
+      const current = this.store.get(key);
+      if (current) {
+        const stored = Number(JSON.parse(current).version);
+        if (Number.isFinite(stored) && stored >= Number(version)) {
+          return 0;
+        }
+      }
+      this.store.set(key, json);
+      return 1;
+    },
+  };
+}
+
+export function memoryPublisher({ fail = false } = {}) {
+  return {
+    messages: [],
+    async publish(channel, message) {
+      if (fail) {
+        throw new Error('publish failed');
+      }
+      this.messages.push({ channel, message: JSON.parse(message) });
       return 1;
     },
   };
@@ -140,16 +190,95 @@ export function memoryProjectStore() {
   };
 }
 
-export function makeApp({ env: envOverrides = {}, cacheFails = false } = {}) {
+export function memoryFlagStore() {
+  const docs = [];
+  const versions = new Map();
+  const clone = (value) => structuredClone(value);
+  const find = (projectId, key) => docs.find((d) => d.projectId === projectId && d.key === key);
+
+  return {
+    docs,
+    async list({ projectId, search, tag, limit }) {
+      let out = docs.filter((d) => d.projectId === projectId);
+      if (tag) {
+        out = out.filter((d) => d.tags.includes(tag));
+      }
+      if (search) {
+        const needle = search.toLowerCase();
+        out = out.filter((d) => d.key.includes(needle) || d.name.toLowerCase().includes(needle));
+      }
+      return clone([...out].sort((a, b) => a.key.localeCompare(b.key)).slice(0, limit));
+    },
+    async count({ projectId }) {
+      return docs.filter((d) => d.projectId === projectId).length;
+    },
+    async get({ projectId, key }) {
+      const doc = find(projectId, key);
+      return doc ? clone(doc) : null;
+    },
+    async create({ projectId, flag }) {
+      if (find(projectId, flag.key)) {
+        throw Object.assign(new Error('E11000 duplicate key'), { code: 11000 });
+      }
+      const now = new Date();
+      const doc = clone({ _id: newId(), projectId, ...flag, createdAt: now, updatedAt: now });
+      docs.push(doc);
+      return clone(doc);
+    },
+    async update({ projectId, key, patch }) {
+      const doc = find(projectId, key);
+      if (!doc) {
+        return null;
+      }
+      Object.assign(doc, clone(patch), { updatedAt: new Date() });
+      return clone(doc);
+    },
+    async delete({ projectId, key }) {
+      const doc = find(projectId, key);
+      if (!doc) {
+        return null;
+      }
+      docs.splice(docs.indexOf(doc), 1);
+      return clone(doc);
+    },
+    async setEnvironmentConfig({ projectId, key, envKey, config, currentVersion }) {
+      const doc = find(projectId, key);
+      if (!doc) {
+        return { status: 'not_found' };
+      }
+      const existing = doc.environments[envKey];
+      const matches = currentVersion === undefined ? existing === undefined : existing?.version === currentVersion;
+      if (!matches) {
+        return { status: 'version_conflict' };
+      }
+      const newConfig = { ...clone(config), version: (currentVersion ?? 0) + 1 };
+      doc.environments[envKey] = newConfig;
+      doc.updatedAt = new Date();
+      return { status: 'ok', config: clone(newConfig) };
+    },
+    async listEnvironmentFlags({ projectId, envKey }) {
+      return clone(docs.filter((d) => d.projectId === projectId && d.environments[envKey]));
+    },
+    async nextRulesetVersion(envId) {
+      const next = (versions.get(envId) ?? 0) + 1;
+      versions.set(envId, next);
+      return next;
+    },
+  };
+}
+
+export function makeApp({ env: envOverrides = {}, cacheFails = false, publisherFails = false } = {}) {
   const env = testEnv(envOverrides);
   const userStore = memoryUserStore();
   const projectStore = memoryProjectStore();
+  const flagStore = memoryFlagStore();
   const auditStore = memoryAuditStore();
   const cache = memoryCache({ fail: cacheFails });
+  const publisher = memoryPublisher({ fail: publisherFails });
   const logs = [];
   const logger = { info() {}, warn: (e) => logs.push(e), error: (e) => logs.push(e) };
-  const app = createApp({ env, userStore, projectStore, auditStore, cache, logger });
-  return { app, env, userStore, projectStore, auditStore, cache, logs };
+  const app = createApp({ env, userStore, projectStore, flagStore, auditStore, cache, publisher, logger });
+  return { app, env, userStore, projectStore, flagStore, auditStore, cache, publisher, logs };
 }
 
 export async function signUp(app, email) {

@@ -1,6 +1,7 @@
 import { initDataLayer, shutdownDataLayer } from './db/index.js';
 import { createApp } from './app.js';
 import { mongoUserStore } from './auth/userStore.js';
+import { mongoFlagStore } from './flags/mongoFlagStore.js';
 import { mongoAuditStore } from './projects/mongoAuditStore.js';
 import { mongoProjectStore } from './projects/mongoProjectStore.js';
 import { serializeError } from './errors.js';
@@ -12,8 +13,10 @@ async function main() {
     env: clients.env,
     userStore: mongoUserStore,
     projectStore: mongoProjectStore,
+    flagStore: mongoFlagStore,
     auditStore: mongoAuditStore,
     cache: clients.cache,
+    publisher: clients.publisher,
     logger,
   });
 

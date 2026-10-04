@@ -19,6 +19,8 @@ const environmentSchema = new mongoose.Schema(
     key: { type: String, required: true, trim: true, lowercase: true },
     name: { type: String, required: true, trim: true },
     sdkKeys: { type: [sdkKeySchema], default: [] },
+    // Increases by one every time this environment's ruleset is rebuilt.
+    rulesetVersion: { type: Number, default: 0 },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );
