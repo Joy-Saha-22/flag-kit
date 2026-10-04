@@ -1,12 +1,21 @@
 import { initDataLayer, shutdownDataLayer } from './db/index.js';
 import { createApp } from './app.js';
 import { mongoUserStore } from './auth/userStore.js';
+import { mongoAuditStore } from './projects/mongoAuditStore.js';
+import { mongoProjectStore } from './projects/mongoProjectStore.js';
 import { serializeError } from './errors.js';
 import { logger } from './logger.js';
 
 async function main() {
   const clients = await initDataLayer();
-  const app = createApp({ env: clients.env, userStore: mongoUserStore, logger });
+  const app = createApp({
+    env: clients.env,
+    userStore: mongoUserStore,
+    projectStore: mongoProjectStore,
+    auditStore: mongoAuditStore,
+    cache: clients.cache,
+    logger,
+  });
 
   const server = app.listen(clients.env.PORT, () => {
     logger.info({ msg: 'server_listening', port: clients.env.PORT });

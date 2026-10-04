@@ -84,6 +84,8 @@ const envSchema = z.object({
     .string()
     .regex(/^\d+(kb|mb)$/i, 'JSON_BODY_LIMIT must look like 100kb or 1mb')
     .default('100kb'),
+  MAX_PROJECTS_PER_USER: z.coerce.number().int().min(1).max(1000).default(20),
+  MAX_SDK_KEYS_PER_ENV: z.coerce.number().int().min(1).max(200).default(25),
 });
 
 const seedEnvSchema = envSchema.extend({

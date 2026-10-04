@@ -1,21 +1,25 @@
-import express from 'express';
+import express, { Router } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { parseOrigins } from './env.js';
 import { AppError, createErrorHandler } from './errors.js';
 import { logger as defaultLogger } from './logger.js';
+import { createLoadProject } from './middleware/project.js';
+import { createRequireAuth } from './middleware/auth.js';
 import { requestId } from './middleware/requestId.js';
 import { requireCustomHeader } from './middleware/requireCustomHeader.js';
 import { createAuthRouter } from './routes/auth.js';
+import { createEnvironmentsRouter } from './routes/environments.js';
+import { createProjectsRouter } from './routes/projects.js';
 
 /**
- * Build the Express app. It does not connect to anything: the database user
- * store is passed in, which is what lets tests run without a database.
+ * Build the Express app. It does not connect to anything: stores and the Redis
+ * client are passed in, which is what lets tests run without a database.
  *
- * @param {{ env: any, userStore: any, logger?: any }} deps
+ * @param {{ env: any, userStore: any, projectStore?: any, auditStore?: any, cache?: any, logger?: any }} deps
  */
-export function createApp({ env, userStore, logger = defaultLogger }) {
+export function createApp({ env, userStore, projectStore, auditStore, cache, logger = defaultLogger }) {
   const app = express();
   app.disable('x-powered-by');
 
@@ -43,10 +47,19 @@ export function createApp({ env, userStore, logger = defaultLogger }) {
     res.json({ status: 'ok' });
   });
 
+  const requireAuth = createRequireAuth({ env, userStore });
+  const loadProject = createLoadProject({ projectStore });
+
   // Dashboard API: cookie auth, so state-changing calls need the custom header.
   app.use('/api', requireCustomHeader);
   app.use('/api/auth', createAuthRouter({ env, userStore }));
-  // Project, environment, and flag routers are added here in the next pieces.
+  app.use('/api/projects', createProjectsRouter({ env, projectStore, auditStore, requireAuth }));
+
+  // Everything under /api/projects/:pid: signed in, member of the project, role set on req.
+  const projectScope = Router();
+  projectScope.use('/environments', createEnvironmentsRouter({ env, projectStore, auditStore, cache, logger }));
+  // Flag routes are added to projectScope in the next piece.
+  app.use('/api/projects/:pid', requireAuth, loadProject, projectScope);
 
   app.use((req, res, next) => {
     next(new AppError(404, 'not_found', 'Not found.'));
