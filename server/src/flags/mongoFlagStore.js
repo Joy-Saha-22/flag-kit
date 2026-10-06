@@ -89,6 +89,12 @@ export const mongoFlagStore = {
       .toArray();
   },
 
+  /** Current ruleset version without changing it (0 if the environment was never synced). */
+  async getRulesetVersion(envId) {
+    const doc = await Environment.findById(envId).select('rulesetVersion').lean();
+    return doc?.rulesetVersion ?? 0;
+  },
+
   /** Atomically bump and return the environment's ruleset version. */
   async nextRulesetVersion(envId) {
     const doc = await Environment.findOneAndUpdate(

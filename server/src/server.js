@@ -2,6 +2,7 @@ import { initDataLayer, shutdownDataLayer } from './db/index.js';
 import { createApp } from './app.js';
 import { mongoUserStore } from './auth/userStore.js';
 import { mongoFlagStore } from './flags/mongoFlagStore.js';
+import { mongoSdkStore } from './sdk/mongoSdkStore.js';
 import { mongoAuditStore } from './projects/mongoAuditStore.js';
 import { mongoProjectStore } from './projects/mongoProjectStore.js';
 import { serializeError } from './errors.js';
@@ -14,9 +15,11 @@ async function main() {
     userStore: mongoUserStore,
     projectStore: mongoProjectStore,
     flagStore: mongoFlagStore,
+    sdkStore: mongoSdkStore,
     auditStore: mongoAuditStore,
     cache: clients.cache,
     publisher: clients.publisher,
+    subscriber: clients.subscriber,
     logger,
   });
 
@@ -33,6 +36,8 @@ async function main() {
     logger.info({ msg: 'shutdown_started', signal });
     const forceExit = setTimeout(() => process.exit(1), 10_000);
     forceExit.unref();
+    // Open event streams never finish on their own, so end them or close() would wait.
+    app.locals.hub.closeAll();
     server.close(async () => {
       await shutdownDataLayer(clients);
       process.exit(0);

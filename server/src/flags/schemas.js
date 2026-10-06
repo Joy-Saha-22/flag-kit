@@ -6,6 +6,8 @@ const TAG = /^[a-z0-9][a-z0-9-_]{0,31}$/;
 const METRIC_KEY = /^[a-z0-9][a-z0-9-_.]{1,63}$/;
 const RULE_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const ATTRIBUTE = /^[A-Za-z0-9_.-]{1,100}$/;
+export { VARIATION_KEY, METRIC_KEY };
+
 const OPERATORS = ['equals', 'notEquals', 'in', 'contains', 'startsWith', 'gt', 'lt'];
 const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 const MAX_CONTEXT_DEPTH = 6;

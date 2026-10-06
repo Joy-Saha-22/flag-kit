@@ -93,6 +93,9 @@ const envSchema = z.object({
   MAX_VALUES_PER_CONDITION: z.coerce.number().int().min(1).max(1000).default(100),
   MAX_USER_CONTEXT_BYTES: z.coerce.number().int().min(256).max(65536).default(4096),
   RULESET_CACHE_TTL_SECONDS: z.coerce.number().int().min(60).max(604800).default(3600),
+  MAX_SSE_CONNECTIONS_PER_KEY: z.coerce.number().int().min(1).max(10000).default(100),
+  SSE_HEARTBEAT_SECONDS: z.coerce.number().int().min(1).max(300).default(25),
+  MAX_EVENTS_PER_BATCH: z.coerce.number().int().min(1).max(1000).default(100),
 });
 
 const seedEnvSchema = envSchema.extend({

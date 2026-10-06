@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { loadEnv } from '../src/env.js';
@@ -69,10 +70,28 @@ export function memoryAuditStore() {
 export function memoryCache({ fail = false } = {}) {
   const boom = () => new Error('redis is down (redis://user:secret@host:6379)');
   return {
+    failing: fail, // tests can flip this to simulate Redis going down
     deleted: [],
     store: new Map(),
+    ttls: new Map(),
+    async get(key) {
+      if (this.failing) {
+        throw boom();
+      }
+      return this.store.get(key) ?? null;
+    },
+    async set(key, value, mode, ttl) {
+      if (this.failing) {
+        throw boom();
+      }
+      this.store.set(key, value);
+      if (mode === 'EX') {
+        this.ttls.set(key, ttl);
+      }
+      return 'OK';
+    },
     async del(key) {
-      if (fail) {
+      if (this.failing) {
         throw boom();
       }
       this.deleted.push(key);
@@ -81,7 +100,7 @@ export function memoryCache({ fail = false } = {}) {
     },
     // Mirrors the compare-and-set script: write only if newer than what is stored.
     async eval(script, numKeys, key, json, version) {
-      if (fail) {
+      if (this.failing) {
         throw boom();
       }
       const current = this.store.get(key);
@@ -106,6 +125,51 @@ export function memoryPublisher({ fail = false } = {}) {
       }
       this.messages.push({ channel, message: JSON.parse(message) });
       return 1;
+    },
+  };
+}
+
+/** Stands in for the ioredis subscriber connection. */
+export function memorySubscriber({ failSubscribe = false } = {}) {
+  const emitter = new EventEmitter();
+  emitter.subscribed = new Set();
+  emitter.subscribe = async (channel) => {
+    if (failSubscribe) {
+      throw new Error('subscribe failed');
+    }
+    emitter.subscribed.add(channel);
+  };
+  emitter.unsubscribe = async (channel) => {
+    emitter.subscribed.delete(channel);
+  };
+  /** Deliver a message as Redis would. */
+  emitter.publish = (channel, payload) => emitter.emit('message', channel, JSON.stringify(payload));
+  return emitter;
+}
+
+export function memorySdkStore({ projectStore }) {
+  const events = [];
+  return {
+    events,
+    lookups: 0,
+    async findEnvironmentByKeyHash(keyHash) {
+      this.lookups += 1;
+      for (const env of projectStore.envs) {
+        const key = env.sdkKeys.find((k) => k.keyHash === keyHash);
+        if (key) {
+          return {
+            envId: env.id,
+            projectId: env.projectId,
+            envKey: env.key,
+            type: key.type,
+            revokedAt: key.revokedAt ?? null,
+          };
+        }
+      }
+      return null;
+    },
+    async insertEvents(docs) {
+      events.push(...docs.map((doc) => ({ ...doc })));
     },
   };
 }
@@ -259,6 +323,9 @@ export function memoryFlagStore() {
     async listEnvironmentFlags({ projectId, envKey }) {
       return clone(docs.filter((d) => d.projectId === projectId && d.environments[envKey]));
     },
+    async getRulesetVersion(envId) {
+      return versions.get(envId) ?? 0;
+    },
     async nextRulesetVersion(envId) {
       const next = (versions.get(envId) ?? 0) + 1;
       versions.set(envId, next);
@@ -267,18 +334,36 @@ export function memoryFlagStore() {
   };
 }
 
-export function makeApp({ env: envOverrides = {}, cacheFails = false, publisherFails = false } = {}) {
+export function makeApp({
+  env: envOverrides = {},
+  cacheFails = false,
+  publisherFails = false,
+  subscribeFails = false,
+} = {}) {
   const env = testEnv(envOverrides);
   const userStore = memoryUserStore();
   const projectStore = memoryProjectStore();
   const flagStore = memoryFlagStore();
+  const sdkStore = memorySdkStore({ projectStore });
   const auditStore = memoryAuditStore();
   const cache = memoryCache({ fail: cacheFails });
   const publisher = memoryPublisher({ fail: publisherFails });
+  const subscriber = memorySubscriber({ failSubscribe: subscribeFails });
   const logs = [];
   const logger = { info() {}, warn: (e) => logs.push(e), error: (e) => logs.push(e) };
-  const app = createApp({ env, userStore, projectStore, flagStore, auditStore, cache, publisher, logger });
-  return { app, env, userStore, projectStore, flagStore, auditStore, cache, publisher, logs };
+  const app = createApp({
+    env,
+    userStore,
+    projectStore,
+    flagStore,
+    sdkStore,
+    auditStore,
+    cache,
+    publisher,
+    subscriber,
+    logger,
+  });
+  return { app, env, userStore, projectStore, flagStore, sdkStore, auditStore, cache, publisher, subscriber, logs };
 }
 
 export async function signUp(app, email) {
