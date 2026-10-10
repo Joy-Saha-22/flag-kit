@@ -12,6 +12,7 @@ import { createRequireAuth } from './middleware/auth.js';
 import { requestId } from './middleware/requestId.js';
 import { requireCustomHeader } from './middleware/requireCustomHeader.js';
 import { createAuditRouter } from './routes/audit.js';
+import { createRateLimits } from './middleware/rateLimit.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createEnvironmentsRouter } from './routes/environments.js';
 import { createFlagsRouter } from './routes/flags.js';
@@ -78,7 +79,9 @@ export function createApp({
   app.use(express.json({ limit: env.JSON_BODY_LIMIT }));
   app.use(cookieParser());
 
-  app.get('/healthz', (req, res) => {
+  const rateLimits = createRateLimits({ env, cache, logger });
+
+  app.get('/healthz', rateLimits.publicIp, (req, res) => {
     res.json({ status: 'ok' });
   });
 
@@ -95,15 +98,18 @@ export function createApp({
 
   // Dashboard API: cookie auth, so state-changing calls need the custom header.
   app.use('/api', requireCustomHeader);
-  app.use('/api/auth', createAuthRouter({ env, userStore }));
-  app.use('/api/projects', createProjectsRouter({ env, projectStore, auditStore, requireAuth }));
+  app.use('/api/auth', createAuthRouter({ env, userStore, rateLimits }));
+  app.use(
+    '/api/projects',
+    createProjectsRouter({ env, projectStore, auditStore, requireAuth, dashboardLimit: rateLimits.dashboardUser }),
+  );
 
   // Everything under /api/projects/:pid: signed in, member of the project, role set on req.
   const projectScope = Router();
   projectScope.use('/environments', createEnvironmentsRouter({ env, projectStore, auditStore, cache, logger }));
   projectScope.use('/flags', createFlagsRouter({ env, projectStore, flagStore, auditStore, sync, schemas, logger }));
   projectScope.use('/audit', createAuditRouter({ auditStore, schemas }));
-  app.use('/api/projects/:pid', requireAuth, loadProject, projectScope);
+  app.use('/api/projects/:pid', requireAuth, rateLimits.dashboardUser, loadProject, projectScope);
 
   // SDK API: SDK key auth, no cookies, no custom header.
   const hub = createStreamHub({ subscriber, logger });
@@ -117,6 +123,7 @@ export function createApp({
       hub,
       sdkStore,
       schemas: createSdkSchemas(env),
+      rateLimits,
       logger,
     }),
   );

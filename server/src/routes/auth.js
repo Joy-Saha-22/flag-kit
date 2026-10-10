@@ -10,11 +10,16 @@ import { createRequireAuth } from '../middleware/auth.js';
 const publicUser = (user) => ({ id: user.id, email: user.email, name: user.name });
 
 /**
- * @param {{ env: any, userStore: any }} deps
+ * @param {{ env: any, userStore: any, rateLimits?: any }} deps
  */
-export function createAuthRouter({ env, userStore }) {
+export function createAuthRouter({ env, userStore, rateLimits = {} }) {
   const router = Router();
   const requireAuth = createRequireAuth({ env, userStore });
+  const noop = (req, res, next) => next();
+  const authIp = rateLimits.authIp ?? noop;
+  const authEmail = rateLimits.authEmail ?? noop;
+  const loginBackoff = rateLimits.loginBackoff ?? noop;
+  const dashboardUser = rateLimits.dashboardUser ?? noop;
 
   // Used so a login for an unknown email takes about as long as a real one.
   let dummyHash;
@@ -30,7 +35,9 @@ export function createAuthRouter({ env, userStore }) {
 
   router.post(
     '/register',
+    authIp,
     validate({ body: registerSchema }),
+    authEmail,
     asyncHandler(async (req, res) => {
       const { email, password, name } = req.valid.body;
       const existing = await userStore.findByEmail(email);
@@ -48,16 +55,21 @@ export function createAuthRouter({ env, userStore }) {
 
   router.post(
     '/login',
+    authIp,
     validate({ body: loginSchema }),
+    authEmail,
+    loginBackoff,
     asyncHandler(async (req, res) => {
       const { email, password } = req.valid.body;
       const user = await userStore.findByEmail(email);
       const hash = user ? user.passwordHash : await getDummyHash();
       const passwordOk = await verifyPassword(password, hash);
       if (!user || !passwordOk) {
+        await rateLimits.recordLoginFailure?.(email);
         // Same status and message for unknown email and wrong password.
         throw new AppError(401, 'invalid_credentials', 'Invalid email or password.');
       }
+      await rateLimits.clearLoginFailures?.(email);
       startSession(res, user);
       res.json({ user: publicUser(user) });
     }),
@@ -68,7 +80,7 @@ export function createAuthRouter({ env, userStore }) {
     res.status(204).end();
   });
 
-  router.get('/me', requireAuth, (req, res) => {
+  router.get('/me', requireAuth, dashboardUser, (req, res) => {
     res.json({ user: req.user });
   });
 

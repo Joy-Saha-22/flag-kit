@@ -69,6 +69,17 @@ export function memoryAuditStore() {
 
 export function memoryCache({ fail = false } = {}) {
   const boom = () => new Error('redis is down (redis://user:secret@host:6379)');
+  const expiresAt = new Map();
+  const live = (cache, key) => {
+    const until = expiresAt.get(key);
+    if (until !== undefined && until <= Date.now()) {
+      cache.store.delete(key);
+      cache.ttls.delete(key);
+      expiresAt.delete(key);
+      return false;
+    }
+    return cache.store.has(key);
+  };
   return {
     failing: fail, // tests can flip this to simulate Redis going down
     deleted: [],
@@ -78,7 +89,7 @@ export function memoryCache({ fail = false } = {}) {
       if (this.failing) {
         throw boom();
       }
-      return this.store.get(key) ?? null;
+      return live(this, key) ? this.store.get(key) : null;
     },
     async set(key, value, mode, ttl) {
       if (this.failing) {
@@ -87,6 +98,11 @@ export function memoryCache({ fail = false } = {}) {
       this.store.set(key, value);
       if (mode === 'EX') {
         this.ttls.set(key, ttl);
+        expiresAt.set(key, Date.now() + Number(ttl) * 1000);
+      }
+      if (mode === 'PX') {
+        this.ttls.set(key, Number(ttl) / 1000);
+        expiresAt.set(key, Date.now() + Number(ttl));
       }
       return 'OK';
     },
@@ -96,14 +112,60 @@ export function memoryCache({ fail = false } = {}) {
       }
       this.deleted.push(key);
       this.store.delete(key);
+      this.ttls.delete(key);
+      expiresAt.delete(key);
       return 1;
     },
-    // Mirrors the compare-and-set script: write only if newer than what is stored.
-    async eval(script, numKeys, key, json, version) {
+    async incr(key) {
       if (this.failing) {
         throw boom();
       }
-      const current = this.store.get(key);
+      live(this, key);
+      const next = Number(this.store.get(key) ?? 0) + 1;
+      this.store.set(key, String(next));
+      return next;
+    },
+    async pexpire(key, ms) {
+      if (this.failing) {
+        throw boom();
+      }
+      if (!live(this, key)) {
+        return 0;
+      }
+      expiresAt.set(key, Date.now() + Number(ms));
+      this.ttls.set(key, Number(ms) / 1000);
+      return 1;
+    },
+    async pttl(key) {
+      if (this.failing) {
+        throw boom();
+      }
+      if (!live(this, key)) {
+        return -2;
+      }
+      const until = expiresAt.get(key);
+      return until === undefined ? -1 : Math.max(0, until - Date.now());
+    },
+    // COMPARE_AND_SET for rulesets, INCR+PEXPIRE for rate limits.
+    async eval(script, numKeys, key, ...argv) {
+      if (this.failing) {
+        throw boom();
+      }
+      if (typeof script === 'string' && script.includes("redis.call('INCR'")) {
+        const windowMs = Number(argv[0]);
+        live(this, key);
+        const n = Number(this.store.get(key) ?? 0) + 1;
+        this.store.set(key, String(n));
+        if (n === 1) {
+          expiresAt.set(key, Date.now() + windowMs);
+        }
+        const until = expiresAt.get(key);
+        const ttl = until === undefined ? -1 : Math.max(0, until - Date.now());
+        return [n, ttl];
+      }
+      const json = argv[0];
+      const version = argv[1];
+      const current = live(this, key) ? this.store.get(key) : null;
       if (current) {
         const stored = Number(JSON.parse(current).version);
         if (Number.isFinite(stored) && stored >= Number(version)) {

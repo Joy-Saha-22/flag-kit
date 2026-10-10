@@ -13,7 +13,8 @@
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "seed": "npm run seed -w @flagkit/server",
-    "test": "npm test --workspaces --if-present"
+    "test": "npm test --workspaces --if-present",
+    "bench:sdk-flags": "npm run bench -w @flagkit/server"
   },
   "engines": {
     "node": ">=20"

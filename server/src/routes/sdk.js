@@ -33,16 +33,23 @@ function etagMatches(header, etag) {
  *   GET  /stream  Server-Sent Events: "put" (full ruleset) on connect, then "patch" per change
  *   POST /events  batches of exposure and conversion events
  *
- * @param {{ env: any, auth: any, loadRuleset: Function, hub: any, sdkStore: any, schemas: any, logger: any }} deps
+ * @param {{ env: any, auth: any, loadRuleset: Function, hub: any, sdkStore: any, schemas: any, rateLimits?: any, logger: any }} deps
  */
-export function createSdkRouter({ env, auth, loadRuleset, hub, sdkStore, schemas, logger }) {
+export function createSdkRouter({ env, auth, loadRuleset, hub, sdkStore, schemas, rateLimits = {}, logger }) {
   const router = Router();
   /** @type {Map<string, number>} open streams per SDK key on this instance */
   const connections = new Map();
+  const noop = (req, res, next) => next();
+  const sdkIp = rateLimits.sdkIp ?? noop;
+  const sdkKey = rateLimits.sdkKey ?? noop;
+  const sdkEventsBody = rateLimits.sdkEventsBody ?? noop;
+
+  router.use(sdkIp);
 
   router.get(
     '/flags',
     auth.middleware,
+    sdkKey,
     asyncHandler(async (req, res) => {
       const json = await loadRuleset(req.sdk);
       const etag = `"${createHash('sha1').update(json).digest('hex').slice(0, 20)}"`;
@@ -58,6 +65,7 @@ export function createSdkRouter({ env, auth, loadRuleset, hub, sdkStore, schemas
   router.get(
     '/stream',
     auth.middleware,
+    sdkKey,
     asyncHandler(async (req, res) => {
       const { envId, keyHash } = req.sdk;
       const open = connections.get(keyHash) ?? 0;
@@ -166,6 +174,8 @@ export function createSdkRouter({ env, auth, loadRuleset, hub, sdkStore, schemas
   router.post(
     '/events',
     auth.middleware,
+    sdkKey,
+    sdkEventsBody,
     validate({ body: schemas.eventsBatch }),
     asyncHandler(async (req, res) => {
       const { events } = req.valid.body;

@@ -7,14 +7,15 @@ import { createProjectSchema } from '../projects/schemas.js';
  * Project list and creation. Everything under /api/projects/:pid lives in the
  * project scope set up in app.js.
  *
- * @param {{ env: any, projectStore: any, auditStore: any, requireAuth: Function }} deps
+ * @param {{ env: any, projectStore: any, auditStore: any, requireAuth: Function, dashboardLimit?: Function }} deps
  */
-export function createProjectsRouter({ env, projectStore, auditStore, requireAuth }) {
+export function createProjectsRouter({ env, projectStore, auditStore, requireAuth, dashboardLimit = (req, res, next) => next() }) {
   const router = Router();
 
   router.get(
     '/',
     requireAuth,
+    dashboardLimit,
     asyncHandler(async (req, res) => {
       const projects = await projectStore.listForUser(req.user.id);
       res.json({ projects });
@@ -24,6 +25,7 @@ export function createProjectsRouter({ env, projectStore, auditStore, requireAut
   router.post(
     '/',
     requireAuth,
+    dashboardLimit,
     validate({ body: createProjectSchema }),
     asyncHandler(async (req, res) => {
       const { name, key } = req.valid.body;

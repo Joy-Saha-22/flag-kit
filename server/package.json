@@ -8,7 +8,8 @@
     "start": "node src/server.js",
     "seed": "node src/scripts/seed.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "bench": "node scripts/bench-sdk-flags.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -19,10 +20,12 @@
     "helmet": "^8.3.0",
     "ioredis": "^5.4.2",
     "jsonwebtoken": "^9.0.3",
+    "@flagkit/evaluator": "*",
     "mongoose": "^8.9.5",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "autocannon": "^8.0.0",
     "supertest": "^7.3.1",
     "vitest": "^2.1.8"
   }

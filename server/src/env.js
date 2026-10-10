@@ -96,6 +96,22 @@ const envSchema = z.object({
   MAX_SSE_CONNECTIONS_PER_KEY: z.coerce.number().int().min(1).max(10000).default(100),
   SSE_HEARTBEAT_SECONDS: z.coerce.number().int().min(1).max(300).default(25),
   MAX_EVENTS_PER_BATCH: z.coerce.number().int().min(1).max(1000).default(100),
+  SDK_EVENTS_MAX_BYTES: z.coerce.number().int().min(256).max(1_048_576).default(65536),
+  AUTH_RATE_LIMIT_IP_MAX: z.coerce.number().int().min(1).max(10000).default(30),
+  AUTH_RATE_LIMIT_IP_WINDOW_SECONDS: z.coerce.number().int().min(1).max(3600).default(60),
+  AUTH_RATE_LIMIT_EMAIL_MAX: z.coerce.number().int().min(1).max(10000).default(20),
+  AUTH_RATE_LIMIT_EMAIL_WINDOW_SECONDS: z.coerce.number().int().min(1).max(3600).default(60),
+  AUTH_BACKOFF_BASE_MS: z.coerce.number().int().min(1).max(600_000).default(500),
+  AUTH_BACKOFF_CAP_MS: z.coerce.number().int().min(1).max(3_600_000).default(30_000),
+  AUTH_BACKOFF_QUIET_SECONDS: z.coerce.number().int().min(1).max(86_400).default(900),
+  PUBLIC_RATE_LIMIT_IP_MAX: z.coerce.number().int().min(1).max(1_000_000).default(120),
+  PUBLIC_RATE_LIMIT_IP_WINDOW_SECONDS: z.coerce.number().int().min(1).max(3600).default(60),
+  DASHBOARD_RATE_LIMIT_USER_MAX: z.coerce.number().int().min(1).max(1_000_000).default(600),
+  DASHBOARD_RATE_LIMIT_USER_WINDOW_SECONDS: z.coerce.number().int().min(1).max(3600).default(60),
+  SDK_RATE_LIMIT_KEY_MAX: z.coerce.number().int().min(1).max(10_000_000).default(6000),
+  SDK_RATE_LIMIT_KEY_WINDOW_SECONDS: z.coerce.number().int().min(1).max(3600).default(60),
+  SDK_RATE_LIMIT_IP_MAX: z.coerce.number().int().min(1).max(10_000_000).default(12000),
+  SDK_RATE_LIMIT_IP_WINDOW_SECONDS: z.coerce.number().int().min(1).max(3600).default(60),
 });
 
 const seedEnvSchema = envSchema.extend({

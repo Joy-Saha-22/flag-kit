@@ -11,14 +11,16 @@ export class AppError extends Error {
    * @param {string} code stable machine-readable code
    * @param {string} message safe public message
    * @param {unknown} [details] safe extra data (for example validation issues)
+   * @param {number} [retryAfterSeconds] set Retry-After on 429 responses
    */
-  constructor(status, code, message, details) {
+  constructor(status, code, message, details, retryAfterSeconds) {
     super(message);
     this.name = 'AppError';
     this.status = status;
     this.code = code;
     this.publicMessage = message;
     this.details = details;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
@@ -68,9 +70,19 @@ export function serializeError(err) {
  * @param {any} err
  * @returns {{ status: number, code: string, message: string, details?: unknown }}
  */
+function mongoCode(err) {
+  return err?.code ?? err?.cause?.code;
+}
+
 function toPublic(err) {
   if (err instanceof AppError) {
-    return { status: err.status, code: err.code, message: err.publicMessage, details: err.details };
+    return {
+      status: err.status,
+      code: err.code,
+      message: err.publicMessage,
+      details: err.details,
+      retryAfterSeconds: err.retryAfterSeconds,
+    };
   }
   if (err?.type === 'entity.parse.failed') {
     return { status: 400, code: 'invalid_json', message: 'Request body is not valid JSON.' };
@@ -81,7 +93,8 @@ function toPublic(err) {
   if (err?.name === 'ValidationError' || err?.name === 'CastError') {
     return { status: 400, code: 'invalid_request', message: 'The request could not be processed.' };
   }
-  if (err?.code === 11000) {
+  // Duplicate key from MongoDB / Mongoose (including wrapped BulkWriteError).
+  if (mongoCode(err) === 11000) {
     return { status: 409, code: 'conflict', message: CONFLICT_MESSAGE };
   }
   return { status: 500, code: 'internal_error', message: 'Something went wrong.' };
@@ -118,6 +131,9 @@ export function createErrorHandler(logger) {
     };
     if (publicError.details !== undefined) {
       body.details = publicError.details;
+    }
+    if (publicError.retryAfterSeconds) {
+      res.set('Retry-After', String(publicError.retryAfterSeconds));
     }
     return res.status(publicError.status).json({ error: body });
   };

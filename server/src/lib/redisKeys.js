@@ -30,3 +30,14 @@ export function sdkKeyCacheKey(keyHash) {
 export function flagUpdatesChannel(envId) {
   return `flag-updates:${envId}`;
 }
+
+export const rateLimitKey = {
+  authIp: (ip) => `ratelimit:auth:ip:${ip}`,
+  authEmail: (email) => `ratelimit:auth:email:${email}`,
+  authFails: (email) => `ratelimit:auth:fails:${email}`,
+  authBackoff: (email) => `ratelimit:auth:backoff:${email}`,
+  publicIp: (ip) => `ratelimit:public:ip:${ip}`,
+  dashboardUser: (userId) => `ratelimit:dash:user:${userId}`,
+  sdkKey: (keyHash) => `ratelimit:sdk:key:${keyHash}`,
+  sdkIp: (ip) => `ratelimit:sdk:ip:${ip}`,
+};
