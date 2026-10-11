@@ -1,10 +1,15 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { evaluate } from '@flagkit/evaluator';
 import { AppError, asyncHandler, serializeError } from '../errors.js';
 import { requireRole } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { defaultEnvConfig, normalizeEnvConfig, serializeFlag, summarizeFlag } from '../flags/ruleset.js';
+import { computeResults } from '../flags/results.js';
 import { checkEnvConfig, referencedVariations } from '../flags/validation.js';
+import { SLUG } from '../projects/schemas.js';
+
+const resultsQuery = z.object({ env: z.string().regex(SLUG, 'Invalid environment key.') }).strict();
 
 const notFound = () => new AppError(404, 'not_found', 'Not found.');
 const invalid = (issues) =>
@@ -14,9 +19,9 @@ const invalid = (issues) =>
  * Flag routes, mounted inside the project scope (req.project and req.projectRole are set).
  * Viewers read, editors create and change flags, admins delete them.
  *
- * @param {{ env: any, projectStore: any, flagStore: any, auditStore: any, sync: Function, schemas: any, logger: any }} deps
+ * @param {{ env: any, projectStore: any, flagStore: any, eventStore?: any, auditStore: any, sync: Function, schemas: any, logger: any }} deps
  */
-export function createFlagsRouter({ env, projectStore, flagStore, auditStore, sync, schemas, logger }) {
+export function createFlagsRouter({ env, projectStore, flagStore, eventStore, auditStore, sync, schemas, logger }) {
   const router = Router();
 
   const findEnvironments = (projectId) => projectStore.listEnvironments(projectId);
@@ -103,6 +108,40 @@ export function createFlagsRouter({ env, projectStore, flagStore, auditStore, sy
         throw notFound();
       }
       res.json({ flag: serializeFlag(doc) });
+    }),
+  );
+
+  router.get(
+    '/:key/results',
+    requireRole('viewer'),
+    validate({ params: schemas.flagParams, query: resultsQuery }),
+    asyncHandler(async (req, res) => {
+      const { key } = req.valid.params;
+      const { env: envKey } = req.valid.query;
+      const environments = await findEnvironments(req.project.id);
+      const flag = await flagStore.get({ projectId: req.project.id, key });
+      if (!flag || !environments.some((e) => e.key === envKey)) {
+        throw notFound();
+      }
+      if (flag.isExperiment !== true) {
+        throw new AppError(400, 'not_an_experiment', 'This flag is not an experiment.');
+      }
+      const counts = await eventStore.variationCounts({
+        projectId: req.project.id,
+        envKey,
+        flagKey: key,
+        goalMetricKey: flag.goalMetricKey,
+      });
+      // The first variation is the control.
+      res.json(
+        computeResults({
+          flagKey: key,
+          envKey,
+          goalMetricKey: flag.goalMetricKey,
+          variations: flag.variations.map((v) => v.key),
+          counts,
+        }),
+      );
     }),
   );
 

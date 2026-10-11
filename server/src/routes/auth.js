@@ -65,11 +65,10 @@ export function createAuthRouter({ env, userStore, rateLimits = {} }) {
       const hash = user ? user.passwordHash : await getDummyHash();
       const passwordOk = await verifyPassword(password, hash);
       if (!user || !passwordOk) {
-        await rateLimits.recordLoginFailure?.(email);
-        // Same status and message for unknown email and wrong password.
+        await rateLimits.recordLoginFailure?.(email, rateLimits.clientIp?.(req));        // Same status and message for unknown email and wrong password.
         throw new AppError(401, 'invalid_credentials', 'Invalid email or password.');
       }
-      await rateLimits.clearLoginFailures?.(email);
+      await rateLimits.clearLoginFailures?.(email, rateLimits.clientIp?.(req));
       startSession(res, user);
       res.json({ user: publicUser(user) });
     }),

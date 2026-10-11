@@ -7,7 +7,7 @@ import { rateLimitKey } from '../lib/redisKeys.js';
  */
 export const INCR_WINDOW_SCRIPT = `
 local n = redis.call('INCR', KEYS[1])
-if n == 1 then
+if n == 1 or redis.call('PTTL', KEYS[1]) < 0 then
   redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[1]))
 end
 local ttl = redis.call('PTTL', KEYS[1])
@@ -32,8 +32,24 @@ export function rateLimited(retryAfterSeconds) {
  * @param {import('express').Request} req
  * @returns {string}
  */
+export function normalizeIp(raw) {
+  if (!raw) return 'unknown';
+  let ip = String(raw).trim().toLowerCase().split('%')[0];
+  if (ip.startsWith('::ffff:') && ip.includes('.')) ip = ip.slice(7);
+  if (!ip.includes(':')) return ip;
+  // IPv6: keep the /64 prefix, so one subnet shares one bucket.
+  const [head, tail] = ip.split('::');
+  const h = head ? head.split(':') : [];
+  const t = tail === undefined ? [] : tail ? tail.split(':') : [];
+  const groups = tail === undefined ? h : [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t];
+  const prefix = groups.slice(0, 4).map((g) => parseInt(g || '0', 16));
+  if (prefix.length < 4 || prefix.some(Number.isNaN)) return ip;
+  return `${prefix.map((g) => g.toString(16)).join(':')}::/64`;
+}
+
 export function clientIp(req) {
-  return req.socket?.remoteAddress || req.ip || 'unknown';
+  // req.ip honours the "trust proxy" setting, and is the socket address when it is 0.
+  return normalizeIp(req.ip ?? req.socket?.remoteAddress);
 }
 
 /**
@@ -139,8 +155,9 @@ export function createRateLimits({ env, cache, logger }) {
     if (!email) {
       return next();
     }
+    const scope = `${email}|${clientIp(req)}`;
     try {
-      const ttlMs = Number(await cache.pttl(rateLimitKey.authBackoff(email)));
+      const ttlMs = Number(await cache.pttl(rateLimitKey.authBackoff(scope)));
       if (ttlMs > 0) {
         throw rateLimited(Math.ceil(ttlMs / 1000));
       }
@@ -159,17 +176,18 @@ export function createRateLimits({ env, cache, logger }) {
    *
    * @param {string} email
    */
-  async function recordLoginFailure(email) {
+  async function recordLoginFailure(email, ip) {
+    const scope = ip ? `${email}|${ip}` : email;
     if (!cache || typeof cache.incr !== 'function') {
       return;
     }
     try {
-      const failsKey = rateLimitKey.authFails(email);
+      const failsKey = rateLimitKey.authFails(scope);
       const n = Number(await cache.incr(failsKey));
       await cache.pexpire(failsKey, env.AUTH_BACKOFF_QUIET_SECONDS * 1000);
       const shift = Math.min(Math.max(n, 1) - 1, 30);
       const delay = Math.min(env.AUTH_BACKOFF_BASE_MS * 2 ** shift, env.AUTH_BACKOFF_CAP_MS);
-      await cache.set(rateLimitKey.authBackoff(email), '1', 'PX', delay);
+      await cache.set(rateLimitKey.authBackoff(scope), '1', 'PX', delay);
     } catch (err) {
       logger.warn({ msg: 'rate_limit_failed', err: serializeError(err) });
     }
@@ -178,13 +196,14 @@ export function createRateLimits({ env, cache, logger }) {
   /**
    * @param {string} email
    */
-  async function clearLoginFailures(email) {
+  async function clearLoginFailures(email, ip) {
+    const scope = ip ? `${email}|${ip}` : email;
     if (!cache || typeof cache.del !== 'function') {
       return;
     }
     try {
-      await cache.del(rateLimitKey.authFails(email));
-      await cache.del(rateLimitKey.authBackoff(email));
+      await cache.del(rateLimitKey.authFails(scope));
+      await cache.del(rateLimitKey.authBackoff(scope));
     } catch (err) {
       logger.warn({ msg: 'rate_limit_failed', err: serializeError(err) });
     }
@@ -211,6 +230,7 @@ export function createRateLimits({ env, cache, logger }) {
     loginBackoff,
     recordLoginFailure,
     clearLoginFailures,
+    clientIp,
     sdkEventsBody,
   };
 }

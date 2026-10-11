@@ -97,6 +97,7 @@ const envSchema = z.object({
   SSE_HEARTBEAT_SECONDS: z.coerce.number().int().min(1).max(300).default(25),
   MAX_EVENTS_PER_BATCH: z.coerce.number().int().min(1).max(1000).default(100),
   SDK_EVENTS_MAX_BYTES: z.coerce.number().int().min(256).max(1_048_576).default(65536),
+  TRUST_PROXY: z.coerce.number().int().min(0).max(10).default(0),
   AUTH_RATE_LIMIT_IP_MAX: z.coerce.number().int().min(1).max(10000).default(30),
   AUTH_RATE_LIMIT_IP_WINDOW_SECONDS: z.coerce.number().int().min(1).max(3600).default(60),
   AUTH_RATE_LIMIT_EMAIL_MAX: z.coerce.number().int().min(1).max(10000).default(20),

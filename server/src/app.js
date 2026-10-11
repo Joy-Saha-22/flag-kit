@@ -44,7 +44,7 @@ export function createApp({
 }) {
   const app = express();
   app.disable('x-powered-by');
-
+  app.set('trust proxy', env.TRUST_PROXY);
   app.use(requestId);
   app.use(helmet());
 
@@ -107,7 +107,7 @@ export function createApp({
   // Everything under /api/projects/:pid: signed in, member of the project, role set on req.
   const projectScope = Router();
   projectScope.use('/environments', createEnvironmentsRouter({ env, projectStore, auditStore, cache, logger }));
-  projectScope.use('/flags', createFlagsRouter({ env, projectStore, flagStore, auditStore, sync, schemas, logger }));
+  projectScope.use('/flags', createFlagsRouter({ env, projectStore, flagStore, auditStore, eventStore: sdkStore, sync, schemas, logger }));
   projectScope.use('/audit', createAuditRouter({ auditStore, schemas }));
   app.use('/api/projects/:pid', requireAuth, rateLimits.dashboardUser, loadProject, projectScope);
 
