@@ -101,7 +101,14 @@ export function createApp({
   app.use('/api/auth', createAuthRouter({ env, userStore, rateLimits }));
   app.use(
     '/api/projects',
-    createProjectsRouter({ env, projectStore, auditStore, requireAuth, dashboardLimit: rateLimits.dashboardUser }),
+    rateLimits.publicIp,
+    createProjectsRouter({
+      env,
+      projectStore,
+      auditStore,
+      requireAuth,
+      dashboardLimit: rateLimits.dashboardUser,
+    }),
   );
 
   // Everything under /api/projects/:pid: signed in, member of the project, role set on req.
