@@ -3,5 +3,17 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
-  "description": "FlagKit SDK (not implemented in the data-layer slice)"
+  "description": "FlagKit SDK",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@flagkit/evaluator": "0.0.1"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8"
+  }
 }
