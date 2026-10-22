@@ -97,11 +97,11 @@ export function createApp({
   });
 
   // Dashboard API: cookie auth, so state-changing calls need the custom header.
+  app.use('/api', rateLimits.publicIp);
   app.use('/api', requireCustomHeader);
   app.use('/api/auth', createAuthRouter({ env, userStore, rateLimits }));
   app.use(
     '/api/projects',
-    rateLimits.publicIp,
     createProjectsRouter({
       env,
       projectStore,
@@ -125,7 +125,7 @@ export function createApp({
     '/sdk/v1',
     createSdkRouter({
       env,
-      auth: createSdkAuth({ sdkStore, cache, logger }),
+      auth: createSdkAuth({ sdkStore, logger }),
       loadRuleset: createRulesetLoader({ cache, flagStore, logger, ttlSeconds: env.RULESET_CACHE_TTL_SECONDS }),
       hub,
       sdkStore,

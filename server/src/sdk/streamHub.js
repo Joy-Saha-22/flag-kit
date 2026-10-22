@@ -1,4 +1,5 @@
 import { flagUpdatesChannel } from '../lib/redisKeys.js';
+import { serializeError } from '../errors.js';
 
 const PREFIX = flagUpdatesChannel('');
 
@@ -91,7 +92,7 @@ export function createStreamHub({ subscriber, logger }) {
           await subscriber.unsubscribe(flagUpdatesChannel(envId));
           subscribed.delete(envId);
         }
-      }).catch((err) => logger.warn({ msg: 'stream_unsubscribe_failed', envId, message: err?.message }));
+      }).catch((err) => logger.warn({ msg: 'stream_unsubscribe_failed', envId, err: serializeError(err) }));
     },
 
     /** End every open stream, so a server shutdown is not held up by them. */

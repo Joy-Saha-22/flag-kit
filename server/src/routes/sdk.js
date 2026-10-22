@@ -50,6 +50,7 @@ export function createSdkRouter({ env, auth, loadRuleset, hub, sdkStore, schemas
     '/flags',
     auth.middleware,
     sdkKey,
+    validate({}),
     asyncHandler(async (req, res) => {
       const json = await loadRuleset(req.sdk);
       const etag = `"${createHash('sha1').update(json).digest('hex').slice(0, 20)}"`;
@@ -66,6 +67,7 @@ export function createSdkRouter({ env, auth, loadRuleset, hub, sdkStore, schemas
     '/stream',
     auth.middleware,
     sdkKey,
+    validate({}),
     asyncHandler(async (req, res) => {
       const { envId, keyHash } = req.sdk;
       const open = connections.get(keyHash) ?? 0;
@@ -146,6 +148,7 @@ export function createSdkRouter({ env, auth, loadRuleset, hub, sdkStore, schemas
             active = await auth.isActive(keyHash);
           } catch (err) {
             logger.warn({ msg: 'stream_key_check_failed', err: serializeError(err) });
+            active = false;
           }
           if (closed) {
             return;

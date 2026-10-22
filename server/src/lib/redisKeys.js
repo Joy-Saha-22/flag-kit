@@ -1,5 +1,11 @@
+import { createHash } from 'node:crypto';
+
 /** Seconds a hashed SDK key may live in Redis before re-checking MongoDB. */
 export const SDK_KEY_CACHE_TTL_SECONDS = 60;
+
+function hashRateLimitIdentifier(identifier) {
+  return createHash('sha256').update(identifier).digest('hex');
+}
 
 /**
  * Full flag ruleset JSON for an environment, including a version number.
@@ -33,9 +39,9 @@ export function flagUpdatesChannel(envId) {
 
 export const rateLimitKey = {
   authIp: (ip) => `ratelimit:auth:ip:${ip}`,
-  authEmail: (email) => `ratelimit:auth:email:${email}`,
-  authFails: (email) => `ratelimit:auth:fails:${email}`,
-  authBackoff: (email) => `ratelimit:auth:backoff:${email}`,
+  authEmail: (email) => `ratelimit:auth:email:${hashRateLimitIdentifier(email)}`,
+  authFails: (scope) => `ratelimit:auth:fails:${hashRateLimitIdentifier(scope)}`,
+  authBackoff: (scope) => `ratelimit:auth:backoff:${hashRateLimitIdentifier(scope)}`,
   publicIp: (ip) => `ratelimit:public:ip:${ip}`,
   dashboardUser: (userId) => `ratelimit:dash:user:${userId}`,
   sdkKey: (keyHash) => `ratelimit:sdk:key:${keyHash}`,

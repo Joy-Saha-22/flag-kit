@@ -1,4 +1,7 @@
 import { AppError } from '../errors.js';
+import { z } from 'zod';
+
+const emptyObject = z.object({}).strict();
 
 /**
  * Validate body, query, and path params against strict zod schemas.
@@ -14,10 +17,7 @@ export function validate(schemas) {
     const issues = [];
 
     for (const part of /** @type {const} */ (['body', 'query', 'params'])) {
-      const schema = schemas[part];
-      if (!schema) {
-        continue;
-      }
+      const schema = schemas[part] ?? emptyObject;
       const input = part === 'body' ? (req.body ?? {}) : req[part];
       const result = schema.safeParse(input);
       if (result.success) {

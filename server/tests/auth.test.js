@@ -161,6 +161,15 @@ describe('session', () => {
     expect(res.status).toBe(401);
   });
 
+  it('rejects unrecognized query parameters', async () => {
+    const { app } = setup();
+    const agent = request.agent(app);
+    await agent.post('/api/auth/register').set(H).send(newUser);
+    const res = await agent.get('/api/auth/me?unexpected=value');
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('validation_failed');
+  });
+
   it('rejects tampered, expired, wrong-secret, alg-none, and unknown-user tokens', async () => {
     const { app } = setup();
     await request(app).post('/api/auth/register').set(H).send(newUser); // creates u1
@@ -254,12 +263,16 @@ describe('errors and hardening', () => {
       .send('{bad json');
     expect(malformed.status).toBe(400);
     expect(malformed.body.error.code).toBe('invalid_json');
+    expect(malformed.body.error.message).toBe('Request body is not valid JSON.');
+    expect(JSON.stringify(malformed.body)).not.toMatch(/SyntaxError|stack|node_modules|server[\\/]/i);
 
     const big = await request(app)
       .post('/api/auth/login')
       .set(H)
       .send({ email: 'a@b.co', password: 'x'.repeat(5000) });
     expect(big.status).toBe(413);
+    expect(big.body.error.message).toBe('Request body is too large.');
+    expect(JSON.stringify(big.body)).not.toMatch(/stack|node_modules|server[\\/]/i);
   });
 
   it('returns a JSON 404 for unknown routes', async () => {

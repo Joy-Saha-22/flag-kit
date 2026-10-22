@@ -21,6 +21,7 @@ export function createEnvironmentsRouter({ env, projectStore, auditStore, cache,
   router.get(
     '/',
     requireRole('viewer'),
+    validate({}),
     asyncHandler(async (req, res) => {
       const environments = await projectStore.listEnvironments(req.project.id);
       res.json({ environments });

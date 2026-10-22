@@ -191,8 +191,8 @@ export function createFlagSchemas(env) {
   });
 
   return {
-    flagParams: z.object({ key: flagKey }),
-    flagEnvParams: z.object({ key: flagKey, envKey: flagKey }),
+    flagParams: z.object({ key: flagKey }).strict(),
+    flagEnvParams: z.object({ key: flagKey, envKey: flagKey }).strict(),
     listQuery: z
       .object({
         search: z.string().trim().max(100).optional(),

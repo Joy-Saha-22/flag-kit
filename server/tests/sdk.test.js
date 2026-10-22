@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { H, makeApp, signUp } from './helpers.js';
-import { sha256Hex } from '../src/lib/sdkKeys.js';
 
 const variations = [
   { key: 'on', name: 'On', value: true },
@@ -70,30 +69,35 @@ describe('SDK authentication', () => {
     expect((await request(ctx.app).get(`/sdk/v1/flags?key=${ctx.client.key}`)).status).toBe(401);
   });
 
-  it('caches active keys, revokes immediately, and keeps working when Redis is down', async () => {
+  it('checks active keys against the store, revokes despite Redis errors, and keeps working when Redis is down', async () => {
     const ctx = await setup();
     const first = await sdkGet(ctx.app, '/sdk/v1/flags', ctx.client.key);
     expect(first.status).toBe(200);
     const lookupsAfterFirst = ctx.sdkStore.lookups;
-    expect(ctx.cache.store.has(`sdkkey:${sha256Hex(ctx.client.key)}`)).toBe(true);
-    expect(ctx.cache.ttls.get(`sdkkey:${sha256Hex(ctx.client.key)}`)).toBe(60);
 
     expect((await sdkGet(ctx.app, '/sdk/v1/flags', ctx.client.key)).status).toBe(200);
-    expect(ctx.sdkStore.lookups).toBe(lookupsAfterFirst);
+    expect(ctx.sdkStore.lookups).toBe(lookupsAfterFirst + 1);
 
     ctx.cache.failing = true;
     const degraded = await sdkGet(ctx.app, '/sdk/v1/flags', ctx.client.key);
     expect(degraded.status).toBe(200);
     expect(degraded.body.flags.length).toBe(2);
     expect(JSON.stringify(ctx.logs)).not.toContain('user:secret');
-    ctx.cache.failing = false;
 
     await ctx.owner.agent.delete(`${keysPath(ctx.pid, 'prod')}/${ctx.client.id}`).set(H);
     expect((await sdkGet(ctx.app, '/sdk/v1/flags', ctx.client.key)).status).toBe(401);
+    ctx.cache.failing = false;
   });
 });
 
 describe('GET /sdk/v1/flags', () => {
+  it('rejects unrecognized query parameters', async () => {
+    const ctx = await setup();
+    const res = await sdkGet(ctx.app, '/sdk/v1/flags?unexpected=value', ctx.client.key);
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('validation_failed');
+  });
+
   it('serves the ruleset with an ETag, answers 304, and changes the ETag when flags change', async () => {
     const ctx = await setup();
     const res = await sdkGet(ctx.app, '/sdk/v1/flags', ctx.client.key);
@@ -452,6 +456,27 @@ describe('GET /sdk/v1/stream', () => {
 
       await ctx.owner.agent.delete(`${keysPath(ctx.pid, 'prod')}/${ctx.client.id}`).set(H);
       const error = await stream.nextEvent('error', 4000);
+      expect(error.data.code).toBe('unauthorized');
+      expect(await stream.nextFrame(2000)).toBe(null);
+      await waitFor(() => ctx.app.locals.hub.connectionCount() === 0);
+    } finally {
+      abort.abort();
+      await stop();
+    }
+  });
+
+  it('fails closed and ends an open stream when its activity check fails', async () => {
+    const ctx = await setup({ env: { SSE_HEARTBEAT_SECONDS: '1' } });
+    const { url, stop } = await listen(ctx.app);
+    const abort = new AbortController();
+    try {
+      const stream = sseReader(await openStream(url, ctx.client.key, abort.signal));
+      await stream.nextEvent('put');
+      ctx.sdkStore.findEnvironmentByKeyHash = async () => {
+        throw new Error('store unavailable');
+      };
+
+      const error = await stream.nextEvent('error', 3000);
       expect(error.data.code).toBe('unauthorized');
       expect(await stream.nextFrame(2000)).toBe(null);
       await waitFor(() => ctx.app.locals.hub.connectionCount() === 0);

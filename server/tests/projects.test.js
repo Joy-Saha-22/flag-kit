@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { H, makeApp, signUp } from './helpers.js';
+import { projectParamsSchema, sdkKeyParamsSchema } from '../src/projects/schemas.js';
 import { sha256Hex } from '../src/lib/sdkKeys.js';
 
 const acme = { name: 'Acme', key: 'acme' };
@@ -10,6 +11,17 @@ const createProject = (agent, body = acme) => agent.post('/api/projects').set(H)
 const keysPath = (pid, envKey = 'dev') => `/api/projects/${pid}/environments/${envKey}/sdk-keys`;
 
 describe('projects', () => {
+  it('rejects unknown project and SDK key path parameter fields', () => {
+    expect(projectParamsSchema.safeParse({ pid: 'a'.repeat(24), unexpected: 'value' }).success).toBe(false);
+    expect(
+      sdkKeyParamsSchema.safeParse({
+        envKey: 'prod',
+        keyId: 'a'.repeat(24),
+        unexpected: 'value',
+      }).success,
+    ).toBe(false);
+  });
+
   it('creates a project with three environments, audits it, and lists it for the owner only', async () => {
     const { app, auditStore } = makeApp();
     const a = await signUp(app, 'a@example.com');
@@ -32,6 +44,17 @@ describe('projects', () => {
     const { app } = makeApp();
     expect((await request(app).get('/api/projects')).status).toBe(401);
     expect((await request(app).post('/api/projects').set(H).send(acme)).status).toBe(401);
+  });
+
+  it('rejects unrecognized query parameters on project routes', async () => {
+    const { app } = makeApp();
+    const a = await signUp(app, 'query@example.com');
+    expect((await a.agent.get('/api/projects?unexpected=value')).status).toBe(400);
+
+    const pid = (await createProject(a.agent)).body.project.id;
+    const res = await a.agent.get(`/api/projects/${pid}/environments?unexpected=value`);
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('validation_failed');
   });
 
   it('rejects invalid input and duplicate project keys', async () => {

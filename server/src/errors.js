@@ -37,6 +37,12 @@ export function asyncHandler(fn) {
 }
 
 const URI_PATTERN = /\b(?:mongodb(?:\+srv)?|rediss?):\/\/[^\s'"]+/gi;
+const SDK_KEY_PATTERN = /\bfk_(?:server|client)_[A-Za-z0-9_-]{43}\b/g;
+const JWT_PATTERN = /\beyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g;
+const AUTHORIZATION_PATTERN = /\bAuthorization\s*:\s*(?:Bearer\s+)?[^\s,;]+/gi;
+const COOKIE_PATTERN = /\b(?:Cookie|Set-Cookie)\s*:\s*[^\r\n]+/gi;
+const SESSION_COOKIE_PATTERN = /\bfk_session=[^;\s,]+/gi;
+const PASSWORD_PATTERN = /\b(?:password|passwd|pwd)\s*[:=]\s*[^\s,;]+/gi;
 
 /**
  * Remove connection strings from text before it is logged.
@@ -45,7 +51,17 @@ const URI_PATTERN = /\b(?:mongodb(?:\+srv)?|rediss?):\/\/[^\s'"]+/gi;
  * @returns {unknown}
  */
 export function redact(text) {
-  return typeof text === 'string' ? text.replace(URI_PATTERN, '[redacted-uri]') : text;
+  if (typeof text !== 'string') {
+    return text;
+  }
+  return text
+    .replace(URI_PATTERN, '[redacted-uri]')
+    .replace(SDK_KEY_PATTERN, '[redacted-sdk-key]')
+    .replace(JWT_PATTERN, '[redacted-jwt]')
+    .replace(AUTHORIZATION_PATTERN, 'Authorization: [redacted]')
+    .replace(COOKIE_PATTERN, 'Cookie: [redacted]')
+    .replace(SESSION_COOKIE_PATTERN, 'fk_session=[redacted]')
+    .replace(PASSWORD_PATTERN, 'password=[redacted]');
 }
 
 /**

@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { H, makeApp, signUp } from './helpers.js';
+import { normalizeIp } from '../src/middleware/rateLimit.js';
+import { rateLimitKey } from '../src/lib/redisKeys.js';
+import { sha256Hex } from '../src/lib/sdkKeys.js';
 
 const loginBody = (email) => ({ email, password: 'a-long-test-password' });
 
@@ -15,6 +18,17 @@ async function expect429(res) {
 }
 
 describe('rate limiting tiers', () => {
+  it('applies the public IP tier to every /api route', async () => {
+    const { app } = makeApp({
+      env: {
+        PUBLIC_RATE_LIMIT_IP_MAX: '1',
+        AUTH_RATE_LIMIT_IP_MAX: '100',
+      },
+    });
+    expect((await request(app).get('/api/auth/me')).status).toBe(401);
+    await expect429(await request(app).get('/api/projects'));
+  });
+
   it('returns 429 on the public IP tier after the configured threshold', async () => {
     const { app } = makeApp({
       env: { PUBLIC_RATE_LIMIT_IP_MAX: '2', PUBLIC_RATE_LIMIT_IP_WINDOW_SECONDS: '60' },
@@ -69,6 +83,52 @@ describe('rate limiting tiers', () => {
     await expect429(await request(app).post('/api/auth/login').set(H).send(unknown));
   });
 
+  it('increments and expires the failed-login counter in one Redis script', async () => {
+    const ctx = makeApp({
+      env: {
+        AUTH_RATE_LIMIT_IP_MAX: '100',
+        AUTH_RATE_LIMIT_EMAIL_MAX: '100',
+      },
+    });
+    await request(ctx.app).post('/api/auth/login').set(H).send(loginBody('someone@example.com'));
+
+    const failureKey = rateLimitKey.authFails('someone@example.com|127.0.0.1');
+    expect(ctx.cache.store.get(failureKey)).toBe('1');
+    expect(await ctx.cache.pttl(failureKey)).toBeGreaterThan(0);
+  });
+
+  it('fails open on Redis errors and logs a redacted warning', async () => {
+    const ctx = makeApp({ cacheFails: true });
+    expect((await request(ctx.app).get('/healthz')).status).toBe(200);
+    expect(ctx.logs.some((entry) => entry.msg === 'rate_limit_failed')).toBe(true);
+    expect(JSON.stringify(ctx.logs)).not.toContain('mongodb://');
+    expect(JSON.stringify(ctx.logs)).not.toContain('redis://');
+  });
+
+  it('uses configured proxy trust for req.ip and groups IPv6 addresses by /64', async () => {
+    expect(normalizeIp('2001:db8:abcd:12::1')).toBe('2001:db8:abcd:12::/64');
+    expect(normalizeIp('2001:db8:abcd:12:ffff::1')).toBe('2001:db8:abcd:12::/64');
+    expect(normalizeIp('::ffff:192.0.2.8')).toBe('192.0.2.8');
+
+    const direct = makeApp({
+      env: { PUBLIC_RATE_LIMIT_IP_MAX: '1', TRUST_PROXY: '0' },
+    });
+    expect((await request(direct.app).get('/healthz').set('X-Forwarded-For', '203.0.113.1')).status).toBe(200);
+    await expect429(
+      await request(direct.app).get('/healthz').set('X-Forwarded-For', '203.0.113.2'),
+    );
+
+    const trustedProxy = makeApp({
+      env: { PUBLIC_RATE_LIMIT_IP_MAX: '1', TRUST_PROXY: '1' },
+    });
+    expect(
+      (await request(trustedProxy.app).get('/healthz').set('X-Forwarded-For', '203.0.113.1')).status,
+    ).toBe(200);
+    expect(
+      (await request(trustedProxy.app).get('/healthz').set('X-Forwarded-For', '203.0.113.2')).status,
+    ).toBe(200);
+  });
+
   it('returns 429 on authenticated dashboard actions after the per-user threshold', async () => {
     const ctx = makeApp({
       env: { DASHBOARD_RATE_LIMIT_USER_MAX: '2', DASHBOARD_RATE_LIMIT_USER_WINDOW_SECONDS: '60' },
@@ -93,6 +153,10 @@ describe('rate limiting tiers', () => {
     const key = keyRes.body.sdkKey.key;
     const hit = () => request(ctx.app).get('/sdk/v1/flags').set('Authorization', key);
     expect((await hit()).status).toBe(200);
+    const sdkRateLimitKeys = [...ctx.cache.store.keys()].filter((name) => name.startsWith('ratelimit:sdk:key:'));
+    expect(sdkRateLimitKeys.length).toBe(1);
+    expect(sdkRateLimitKeys[0]).not.toContain(key);
+    expect(sdkRateLimitKeys[0]).toContain(sha256Hex(key));
     expect((await hit()).status).toBe(200);
     await expect429(await hit());
   });

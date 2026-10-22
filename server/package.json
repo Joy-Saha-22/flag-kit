@@ -12,6 +12,7 @@
     "bench": "node scripts/bench-sdk-flags.js"
   },
   "dependencies": {
+    "@flagkit/evaluator": "*",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
@@ -20,13 +21,12 @@
     "helmet": "^8.3.0",
     "ioredis": "^5.4.2",
     "jsonwebtoken": "^9.0.3",
-    "@flagkit/evaluator": "*",
     "mongoose": "^8.9.5",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "autocannon": "^8.0.0",
     "supertest": "^7.3.1",
-    "vitest": "^2.1.8"
+    "vitest": "^4.1.12"
   }
 }

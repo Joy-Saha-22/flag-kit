@@ -1,6 +1,5 @@
 import { AppError, asyncHandler, serializeError } from '../errors.js';
 import { sha256Hex } from '../lib/sdkKeys.js';
-import { SDK_KEY_CACHE_TTL_SECONDS, sdkKeyCacheKey } from '../lib/redisKeys.js';
 
 // "fk_server_" or "fk_client_" plus 43 base64url characters (32 random bytes).
 const KEY_FORMAT = /^fk_(server|client)_[A-Za-z0-9_-]{43}$/;
@@ -18,28 +17,17 @@ function extractKey(req) {
 }
 
 /**
- * SDK key authentication. Active keys are cached in Redis for a short time;
- * revoking a key deletes its cache entry, so revocation is immediate.
+ * SDK key authentication always checks the source of truth so a stale cache
+ * entry cannot authorize a revoked key.
  *
- * @param {{ sdkStore: any, cache: any, logger: any, ttlSeconds?: number }} deps
+ * @param {{ sdkStore: any, logger: any }} deps
  */
-export function createSdkAuth({ sdkStore, cache, logger, ttlSeconds = SDK_KEY_CACHE_TTL_SECONDS }) {
+export function createSdkAuth({ sdkStore, logger }) {
   /**
    * @param {string} keyHash
    * @returns {Promise<{ envId: string, projectId: string, envKey: string, type: string, keyHash: string } | null>}
    */
   async function lookup(keyHash) {
-    const cacheKey = sdkKeyCacheKey(keyHash);
-    try {
-      const cached = await cache.get(cacheKey);
-      if (cached) {
-        return JSON.parse(cached);
-      }
-    } catch (err) {
-      // Redis trouble must not lock customers out: fall back to MongoDB.
-      logger.warn({ msg: 'sdk_key_cache_read_failed', err: serializeError(err) });
-    }
-
     const found = await sdkStore.findEnvironmentByKeyHash(keyHash);
     if (!found || found.revokedAt) {
       return null;
@@ -51,12 +39,6 @@ export function createSdkAuth({ sdkStore, cache, logger, ttlSeconds = SDK_KEY_CA
       type: found.type,
       keyHash,
     };
-    try {
-      // Only active keys are ever cached.
-      await cache.set(cacheKey, JSON.stringify(record), 'EX', ttlSeconds);
-    } catch (err) {
-      logger.warn({ msg: 'sdk_key_cache_write_failed', err: serializeError(err) });
-    }
     return record;
   }
 

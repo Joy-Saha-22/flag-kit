@@ -13,11 +13,15 @@ export const createProjectSchema = z
   })
   .strict();
 
-export const envParamsSchema = z.object({ envKey: slug });
+export const projectParamsSchema = z.object({ pid: z.string().regex(OBJECT_ID, 'Invalid project id.') }).strict();
 
-export const sdkKeyParamsSchema = z.object({
-  envKey: slug,
-  keyId: z.string().regex(OBJECT_ID, 'Invalid key id.'),
-});
+export const envParamsSchema = z.object({ envKey: slug }).strict();
+
+export const sdkKeyParamsSchema = z
+  .object({
+    envKey: slug,
+    keyId: z.string().regex(OBJECT_ID, 'Invalid key id.'),
+  })
+  .strict();
 
 export const createSdkKeySchema = z.object({ type: z.enum(['server', 'client']) }).strict();

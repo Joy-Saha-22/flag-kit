@@ -21,12 +21,18 @@ export function createAuthRouter({ env, userStore, rateLimits = {} }) {
   const loginBackoff = rateLimits.loginBackoff ?? noop;
   const dashboardUser = rateLimits.dashboardUser ?? noop;
 
-  // Used so a login for an unknown email takes about as long as a real one.
-  let dummyHash;
-  const getDummyHash = () => {
-    dummyHash ??= hashPassword('not-a-real-password', env.BCRYPT_COST);
-    return dummyHash;
-  };
+  // Start this once when the router is created, not on the first unknown-user login.
+  const dummyHashPromise = hashPassword('not-a-real-password', env.BCRYPT_COST).then(
+    (hash) => ({ hash }),
+    (error) => ({ error }),
+  );
+  const ensureDummyHash = asyncHandler(async (req, res, next) => {
+    const initialized = await dummyHashPromise;
+    if (initialized.error) {
+      throw initialized.error;
+    }
+    next();
+  });
 
   const startSession = (res, user) => {
     const token = signSessionToken(user.id, { secret: env.JWT_SECRET, ttlSeconds: env.JWT_TTL_SECONDS });
@@ -55,6 +61,7 @@ export function createAuthRouter({ env, userStore, rateLimits = {} }) {
 
   router.post(
     '/login',
+    ensureDummyHash,
     authIp,
     validate({ body: loginSchema }),
     authEmail,
@@ -62,7 +69,8 @@ export function createAuthRouter({ env, userStore, rateLimits = {} }) {
     asyncHandler(async (req, res) => {
       const { email, password } = req.valid.body;
       const user = await userStore.findByEmail(email);
-      const hash = user ? user.passwordHash : await getDummyHash();
+      const initialized = await dummyHashPromise;
+      const hash = user ? user.passwordHash : initialized.hash;
       const passwordOk = await verifyPassword(password, hash);
       if (!user || !passwordOk) {
         await rateLimits.recordLoginFailure?.(email, rateLimits.clientIp?.(req));        // Same status and message for unknown email and wrong password.
@@ -74,14 +82,24 @@ export function createAuthRouter({ env, userStore, rateLimits = {} }) {
     }),
   );
 
-  router.post('/logout', (req, res) => {
-    clearSessionCookie(res, env);
-    res.status(204).end();
-  });
+  router.post(
+    '/logout',
+    validate({}),
+    (req, res) => {
+      clearSessionCookie(res, env);
+      res.status(204).end();
+    },
+  );
 
-  router.get('/me', requireAuth, dashboardUser, (req, res) => {
-    res.json({ user: req.user });
-  });
+  router.get(
+    '/me',
+    requireAuth,
+    validate({}),
+    dashboardUser,
+    (req, res) => {
+      res.json({ user: req.user });
+    },
+  );
 
   return router;
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
-import { H, makeApp, signUp } from './helpers.js';
+import { H, makeApp, signUp, testEnv } from './helpers.js';
+import { createFlagSchemas } from '../src/flags/schemas.js';
 
 const checkout = {
   key: 'checkout',
@@ -31,6 +32,16 @@ const putConfig = (agent, pid, body, envKey = 'prod', key = 'checkout') =>
   agent.put(envPath(pid, key, envKey)).set(H).send(body);
 const evaluateTest = (agent, pid, userContext, envKey = 'prod') =>
   agent.post(`${envPath(pid, 'checkout', envKey)}/evaluate-test`).set(H).send({ userContext });
+
+describe('flag path parameter schemas', () => {
+  it('rejects unknown fields', () => {
+    const schemas = createFlagSchemas(testEnv());
+    expect(schemas.flagParams.safeParse({ key: 'checkout', unexpected: 'value' }).success).toBe(false);
+    expect(
+      schemas.flagEnvParams.safeParse({ key: 'checkout', envKey: 'prod', unexpected: 'value' }).success,
+    ).toBe(false);
+  });
+});
 
 async function setup(options) {
   const ctx = makeApp(options);

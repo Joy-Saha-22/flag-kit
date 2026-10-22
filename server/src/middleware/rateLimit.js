@@ -14,6 +14,12 @@ local ttl = redis.call('PTTL', KEYS[1])
 return {n, ttl}
 `;
 
+export const INCR_EXPIRE_SCRIPT = `
+local n = redis.call('INCR', KEYS[1])
+redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[1]))
+return n
+`;
+
 const RATE_LIMITED_MESSAGE = 'Too many requests.';
 
 /**
@@ -178,13 +184,14 @@ export function createRateLimits({ env, cache, logger }) {
    */
   async function recordLoginFailure(email, ip) {
     const scope = ip ? `${email}|${ip}` : email;
-    if (!cache || typeof cache.incr !== 'function') {
+    if (!cache || typeof cache.eval !== 'function') {
       return;
     }
     try {
       const failsKey = rateLimitKey.authFails(scope);
-      const n = Number(await cache.incr(failsKey));
-      await cache.pexpire(failsKey, env.AUTH_BACKOFF_QUIET_SECONDS * 1000);
+      const n = Number(
+        await cache.eval(INCR_EXPIRE_SCRIPT, 1, failsKey, String(env.AUTH_BACKOFF_QUIET_SECONDS * 1000)),
+      );
       const shift = Math.min(Math.max(n, 1) - 1, 30);
       const delay = Math.min(env.AUTH_BACKOFF_BASE_MS * 2 ** shift, env.AUTH_BACKOFF_CAP_MS);
       await cache.set(rateLimitKey.authBackoff(scope), '1', 'PX', delay);

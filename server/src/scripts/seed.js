@@ -3,6 +3,7 @@ import { loadSeedEnv } from '../env.js';
 import { connectMongo, disconnectMongo } from '../db/mongoose.js';
 import { generateSdkKey, toStoredSdkKey } from '../lib/sdkKeys.js';
 import { hashPassword } from '../lib/passwords.js';
+import { serializeError } from '../errors.js';
 import { User } from '../models/User.js';
 import { Project } from '../models/Project.js';
 import { Environment } from '../models/Environment.js';
@@ -247,7 +248,7 @@ async function seed() {
 }
 
 seed().catch(async (error) => {
-  const message = error instanceof Error ? error.message : 'unknown error';
+  const message = serializeError(error).message;
   console.error(`Seed failed: ${message}`);
   try {
     await disconnectMongo();

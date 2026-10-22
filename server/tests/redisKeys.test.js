@@ -13,6 +13,9 @@ describe('redisKeys', () => {
     expect(sdkKeyCacheKey('abc')).toBe('sdkkey:abc');
     expect(flagUpdatesChannel('env123')).toBe('flag-updates:env123');
     expect(rateLimitKey.authIp('127.0.0.1')).toBe('ratelimit:auth:ip:127.0.0.1');
+    expect(rateLimitKey.authEmail('person@example.com')).not.toContain('person@example.com');
+    expect(rateLimitKey.authFails('person@example.com|127.0.0.1')).not.toContain('person@example.com');
+    expect(rateLimitKey.authBackoff('person@example.com|127.0.0.1')).not.toContain('person@example.com');
     expect(SDK_KEY_CACHE_TTL_SECONDS).toBe(60);
   });
 });

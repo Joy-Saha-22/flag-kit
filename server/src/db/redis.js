@@ -1,4 +1,5 @@
 import Redis from 'ioredis';
+import { serializeError } from '../errors.js';
 
 /**
  * @typedef {Object} RedisClients
@@ -20,8 +21,7 @@ function createClient(url, name) {
   });
 
   client.on('error', (error) => {
-    const message = error instanceof Error ? error.message : 'unknown error';
-    console.error(`Redis (${name}) error: ${message}`);
+    console.error(`Redis (${name}) error:`, serializeError(error));
   });
 
   return client;

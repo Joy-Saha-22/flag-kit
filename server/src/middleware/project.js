@@ -1,4 +1,5 @@
 import { AppError, asyncHandler } from '../errors.js';
+import { projectParamsSchema } from '../projects/schemas.js';
 
 /**
  * Load the project named by :pid and check the signed-in user is a member.
@@ -11,8 +12,12 @@ import { AppError, asyncHandler } from '../errors.js';
  */
 export function createLoadProject({ projectStore }) {
   return asyncHandler(async (req, res, next) => {
+    const parsedParams = projectParamsSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      throw new AppError(404, 'not_found', 'Not found.');
+    }
     const project = await projectStore.findForMember({
-      projectId: String(req.params.pid),
+      projectId: parsedParams.data.pid,
       userId: req.user.id,
     });
     if (!project) {

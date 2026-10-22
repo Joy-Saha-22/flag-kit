@@ -1,8 +1,25 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { H, makeApp, signUp } from './helpers.js';
+import { redact } from '../src/errors.js';
 
 describe('central error handler', () => {
+  it('redacts SDK keys, passwords, cookies, and JWTs from error log text', () => {
+    const sdkKey = `fk_server_${'a'.repeat(43)}`;
+    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.signature';
+    const redacted = [
+      redact(`sdk=${sdkKey}`),
+      redact('password=hunter2'),
+      redact(`Authorization: Bearer ${jwt}`),
+      redact(`Cookie: fk_session=${jwt}`),
+    ].join(' ');
+
+    expect(redacted).not.toContain('hunter2');
+    expect(redacted).not.toContain(jwt);
+    expect(redacted).not.toContain(sdkKey);
+    expect(redacted).toContain('[redacted-sdk-key]');
+  });
+
   it('returns a generic body when a store throws a database error', async () => {
     const ctx = makeApp();
     const { agent } = await signUp(ctx.app, 'owner@example.com');

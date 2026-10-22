@@ -15,6 +15,7 @@ export function createProjectsRouter({ env, projectStore, auditStore, requireAut
   router.get(
     '/',
     requireAuth,
+    validate({}),
     dashboardLimit,
     asyncHandler(async (req, res) => {
       const projects = await projectStore.listForUser(req.user.id);

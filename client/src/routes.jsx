@@ -262,12 +262,19 @@ export function flagShouldRevalidate({ currentUrl, nextUrl, formMethod, formActi
   return false;
 }
 
-async function loginAction({ request }) {
+export async function loginAction({ request }) {
   const form = await request.formData();
-  const next = new URL(request.url).searchParams.get('next');
+  const requestUrl = new URL(request.url);
+  const next = requestUrl.searchParams.get('next');
   try {
     await login({ email: String(form.get('email') || ''), password: String(form.get('password') || '') });
-    return redirect(next && next.startsWith('/') && !next.startsWith('//') ? next : '/');
+    if (!next || !next.startsWith('/') || next.startsWith('//') || next.includes('\\')) {
+      return redirect('/');
+    }
+    const destination = new URL(next, requestUrl.origin);
+    return redirect(destination.origin === requestUrl.origin
+      ? `${destination.pathname}${destination.search}${destination.hash}`
+      : '/');
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
       return {

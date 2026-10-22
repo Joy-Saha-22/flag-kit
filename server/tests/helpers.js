@@ -146,12 +146,31 @@ export function memoryCache({ fail = false } = {}) {
       const until = expiresAt.get(key);
       return until === undefined ? -1 : Math.max(0, until - Date.now());
     },
-    // COMPARE_AND_SET for rulesets, INCR+PEXPIRE for rate limits.
+    // Atomic fixed-window and failed-login rate-limit scripts; CAS for rulesets.
     async eval(script, numKeys, key, ...argv) {
       if (this.failing) {
         throw boom();
       }
       if (typeof script === 'string' && script.includes("redis.call('INCR'")) {
+        if (script.includes("redis.call('PTTL'")) {
+          const windowMs = Number(argv[0]);
+          live(this, key);
+          const n = Number(this.store.get(key) ?? 0) + 1;
+          this.store.set(key, String(n));
+          if (n === 1) {
+            expiresAt.set(key, Date.now() + windowMs);
+          }
+          const until = expiresAt.get(key);
+          const ttl = until === undefined ? -1 : Math.max(0, until - Date.now());
+          return [n, ttl];
+        }
+        if (script.includes("redis.call('PEXPIRE'")) {
+          live(this, key);
+          const n = Number(this.store.get(key) ?? 0) + 1;
+          this.store.set(key, String(n));
+          expiresAt.set(key, Date.now() + Number(argv[0]));
+          return n;
+        }
         const windowMs = Number(argv[0]);
         live(this, key);
         const n = Number(this.store.get(key) ?? 0) + 1;
