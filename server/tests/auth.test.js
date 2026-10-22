@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import { createApp } from '../src/app.js';
 import { loadEnv } from '../src/env.js';
 import { requireRole } from '../src/middleware/auth.js';
@@ -21,6 +22,10 @@ const env = loadEnv({
 });
 
 const H = { 'X-Requested-By': 'flagkit-dashboard' };
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 function memoryUserStore() {
   const users = new Map();
@@ -118,9 +123,13 @@ describe('login', () => {
     expect(res.headers['set-cookie'][0]).toContain('fk_session=');
   });
 
-  it('returns the same response for an unknown email and a wrong password', async () => {
+  it('initializes dummy bcrypt once and verifies unknown and wrong passwords at the configured cost', async () => {
+    const hashSpy = vi.spyOn(bcrypt, 'hash');
+    const compareSpy = vi.spyOn(bcrypt, 'compare');
     const { app } = setup();
+    expect(hashSpy).toHaveBeenCalledTimes(1);
     await request(app).post('/api/auth/register').set(H).send(newUser);
+    expect(hashSpy).toHaveBeenCalledTimes(2);
     const wrongPassword = await request(app)
       .post('/api/auth/login')
       .set(H)
@@ -133,6 +142,12 @@ describe('login', () => {
     expect(unknownEmail.status).toBe(401);
     expect(wrongPassword.body.error.code).toBe(unknownEmail.body.error.code);
     expect(wrongPassword.body.error.message).toBe(unknownEmail.body.error.message);
+    expect(Object.keys(wrongPassword.body.error).sort()).toEqual(Object.keys(unknownEmail.body.error).sort());
+    expect(compareSpy).toHaveBeenCalledTimes(2);
+    for (const [, hash] of compareSpy.mock.calls) {
+      expect(bcrypt.getRounds(hash)).toBe(env.BCRYPT_COST);
+    }
+    expect(hashSpy).toHaveBeenCalledTimes(4);
   });
 
   it('rejects operator-injection payloads', async () => {
