@@ -1,5 +1,5 @@
 import { redirect } from 'react-router-dom';
-
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 export class ApiError extends Error {
   constructor({ status, code, message, requestId, details, retryAfterSeconds }) {
     super(message);
@@ -33,7 +33,7 @@ export async function apiFetch(url, options = {}) {
     headerObject['Content-Type'] = 'application/json';
   }
 
-  const response = await fetch(url, {
+  const response = await fetch(`${API_BASE_URL}${url}`, {
     ...options,
     method,
     credentials: 'include',
