@@ -236,61 +236,6 @@ Each run passed both scenarios. Full ruleset requests returned HTTP 200, and con
 
 These results describe this local test environment, not guaranteed production capacity. Performance depends on the machine, workload, ruleset size, and system load. The `BENCH_MODE=inprocess` mode uses in-memory test stores and fake Redis, so it measures framework overhead rather than deployed-service performance.
 
-## Security notes
-
-- Dashboard session cookies are `httpOnly`, `SameSite=Lax`, and `Secure` in production.
-- `POST`, `PUT`, and `DELETE` `/api` requests require `X-Requested-By: flagkit-dashboard`; `GET`, `HEAD`, and `OPTIONS` are exempt.
-- SDK keys are stored as SHA-256 hashes with a short prefix; clients send keys in the `Authorization` header.
-- Request schemas reject unknown fields and validate request bodies, query parameters, and path parameters.
-- Redis-backed rate limits are applied to the API and SDK tiers; limiter errors are logged without connection strings and fail open when Redis is unavailable.
-- Serialized errors redact connection strings and common credential-shaped values; reviewed infrastructure error paths use this serializer.
-
-See [SECURITY_REVIEW.md](./SECURITY_REVIEW.md) for the repository security review and its documented findings and verification limits.
-
-## Design decisions and tradeoffs
-
-### MongoDB source of truth, Redis cache
-
-MongoDB stores the persistent configuration and event data, while Redis stores generated rulesets, carries update notifications, and tracks rate limits. SDK ruleset requests can be served from Redis while the cache is available, but Redis outages can delay live synchronization and disable rate limiting until Redis recovers.
-
-### Deterministic hashing for rollouts
-
-The evaluator hashes the flag key, environment salt, and user key with MurmurHash3 and maps the result to a stable rollout bucket. The same inputs therefore receive the same bucket; changing the flag, environment, or user key can change the assignment.
-
-### Client SDK keys are public
-
-Client keys are designed for browser use and are not secrets. They can read the environment's full targeting rules, so do not put secrets or sensitive values in flag rules or variation values.
-
-### Fixed-window rate limiting
-
-Rate limits count requests in Redis-backed fixed windows, not token buckets or sliding windows. The Redis Lua script uses `INCR` and expiry to count requests within each window. This is simple to operate, but requests clustered around a window boundary can exceed the configured maximum across the two adjacent windows.
-
-### Fail open when Redis is down
-
-Rate-limit middleware logs a warning and permits the request when Redis operations fail; ruleset sync can likewise report a saved change as delayed. This favors API availability, but rate limits and immediate propagation are not guaranteed during a Redis outage.
-
-### Per-flag optimistic locking
-
-Environment configuration saves compare the version the editor loaded with the stored version and return a conflict instead of silently overwriting a concurrent edit. This prevents lost updates but requires the editor to reload and retry after a conflict.
-
-### SSE instead of WebSockets
-
-The server uses SSE for server-to-SDK ruleset updates, while SDK requests and events use ordinary HTTP. SSE fits the one-way update flow; the SDK falls back to polling after repeated stream failures.
-
-## Known limitations
-
-- Registration is open: the server has no `REGISTRATION_ENABLED` setting. The auth routes do not provide password reset or email verification.
-- Project member management is not available in the dashboard. Adding collaborators currently requires manually updating the project's `members` array in MongoDB. There is no in-app invitation or role-assignment workflow.
-- The per-email auth rate limit applies to login and registration across IPs. An attacker can consume a victim's email-tier allowance and temporarily throttle those requests.
-- Anyone holding a client SDK key can submit fabricated, valid-shaped exposure and conversion events for arbitrary user keys. Accepted events can affect experiment results; client telemetry is not proof of user activity.
-- Client SDK keys expose the complete targeting rules for their environment; rule values must not contain secrets.
-- Logout clears the browser cookie but does not revoke a copied JWT. A copied token remains valid until it expires (eight hours by default; configurable up to 30 days).
-- The security review reports dependency advisories affecting development dependencies only (10 vulnerable package entries at review time); no dependency updates were applied.
-- The seed command prints generated SDK keys to stdout. Captured terminal or CI output could retain them; seed only where that output is access-controlled and not retained.
-- `HEAD` and `OPTIONS` are exempt from the `/api` custom-header check, in addition to `GET`. An incorrect `TRUST_PROXY` hop count can also allow forwarded client IP spoofing and weaken IP-based limits.
-- Experiment statistics are calculated from SDK-submitted exposure and conversion events. The API compares each non-control variation with the first variation as the control and uses a two-proportion z-test; results depend on the submitted event data and sample size.
-- Benchmark results are from a three-run local test and do not establish production capacity. Results can vary with workload, ruleset size, infrastructure, and system load.
-
 ## Repository layout
 
 ```text
