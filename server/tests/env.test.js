@@ -15,6 +15,22 @@ describe('envSchema', () => {
     expect(parsed.success).toBe(true);
     if (parsed.success) {
       expect(parsed.data.PORT).toBe(3000);
+      expect(parsed.data.SERVE_CLIENT).toBe(false);
+      expect(parsed.data.CLIENT_DIST_DIR).toBe('client/dist');
+      expect(parsed.data.REGISTRATION_ENABLED).toBe(true);
+    }
+  });
+
+  it('parses client serving and registration switches', () => {
+    const parsed = envSchema.safeParse({
+      ...valid,
+      SERVE_CLIENT: 'true',
+      REGISTRATION_ENABLED: 'false',
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.SERVE_CLIENT).toBe(true);
+      expect(parsed.data.REGISTRATION_ENABLED).toBe(false);
     }
   });
 

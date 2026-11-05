@@ -68,7 +68,6 @@ No production dependency vulnerabilities were reported. The audit totals were 5 
 - **Exception:** `server/src/scripts/seed.js` deliberately prints newly generated SDK keys to stdout once for operator setup. This is not emitted through the app logger, but stdout may be retained by terminals or CI. Use the seed command only with protected output; this report does not include any key value.
 - Forced exceptions may still yield diagnostic server-side stack traces and source paths after redaction; these are not sent to clients. Verify production log access and retention controls operationally.
 
-## SDK API, client, Docker, and denial-of-service checks
 
 ### SDK API
 
@@ -158,3 +157,29 @@ Project-scoped routes pass through session auth, per-user limiting, then `loadPr
 - `npm test --workspaces --if-present` — passed: server 13 files / 107 tests, client 13 files / 29 tests, SDK 1 file / 13 tests, evaluator 2 files / 32 tests.
 - `npm run build -w @flagkit/client` — passed. Final bundle marker scan: zero occurrences for all five requested markers.
 - Focused Redis regression tests — passed after the Redis key hashing and error-log redaction fixes.
+
+## Project Member Management and Role Assignment
+
+**Classification:** Functional limitation / Access management
+
+**Observation:**
+
+The application does not currently provide an interface for project owners or administrators to invite users, add existing users to a project, or manage project member roles.
+
+Project membership and role assignments are stored in MongoDB. Adding another user to a project therefore requires manually updating the project's `members` array in the database.
+
+**Impact:**
+
+- Project owners cannot manage collaborators directly through the dashboard.
+- Assigning roles such as `viewer`, `editor`, or `admin` requires database-level intervention.
+- Providing restricted demo access to external users, such as recruiters, involves manually creating an account and assigning it to the intended project.
+
+**Current Workaround:**
+
+An administrator can create a separate demo user account and manually add that user's ID to the appropriate project's `members` array with the `viewer` role. The assigned permissions should then be verified through the application.
+
+**Recommendation:**
+
+Implement project member management with invitation workflows, role assignment, and member removal. Until this functionality is available, project membership changes should be performed only by authorized administrators, with appropriate care taken to verify user IDs and assigned roles.
+
+**Status:** Not implemented.

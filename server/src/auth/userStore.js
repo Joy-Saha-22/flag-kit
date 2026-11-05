@@ -20,6 +20,9 @@ function toRecord(doc) {
 export const mongoUserStore = {
   /** @param {string} email @returns {Promise<UserRecord | null>} */
   async findByEmail(email) {
+    console.log("Database:", User.db.name);
+    console.log("Collection:", User.collection.name);
+    console.log("Email being searched:", JSON.stringify(email));
     const doc = await User.findOne({ email }).lean();
     return doc ? toRecord(doc) : null;
   },

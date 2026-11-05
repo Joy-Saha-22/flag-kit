@@ -7,6 +7,11 @@ import { mongoAuditStore } from './projects/mongoAuditStore.js';
 import { mongoProjectStore } from './projects/mongoProjectStore.js';
 import { serializeError } from './errors.js';
 import { logger } from './logger.js';
+import dns from 'node:dns';
+
+dns.setServers(['8.8.8.8', '1.1.1.1']);
+
+// Existing imports and server code below
 
 async function main() {
   const clients = await initDataLayer();

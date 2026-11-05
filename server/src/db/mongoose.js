@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-
 /**
  * Connect to MongoDB. The URI is never logged.
  *

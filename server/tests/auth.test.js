@@ -51,7 +51,7 @@ function setup(overrides = {}) {
   const userStore = overrides.userStore ?? memoryUserStore();
   const logs = [];
   const logger = { info() {}, warn: (e) => logs.push(e), error: (e) => logs.push(e) };
-  const app = createApp({ env, userStore, logger });
+  const app = createApp({ env: overrides.env ?? env, userStore, logger });
   return { app, userStore, logs };
 }
 
@@ -75,6 +75,24 @@ describe('registration', () => {
     expect(/SameSite=Lax/i.test(cookie)).toBe(true);
     const stored = [...userStore.users.values()][0];
     expect(stored.passwordHash).not.toBe(newUser.password);
+  });
+
+  it('returns registration_closed when registration is disabled', async () => {
+    const disabledEnv = loadEnv({
+      NODE_ENV: 'test',
+      MONGODB_URI: 'mongodb://localhost:27017/flagkit-test',
+      REDIS_URL: 'redis://localhost:6379',
+      JWT_SECRET: SECRET,
+      BCRYPT_COST: '4',
+      CORS_ORIGINS: 'http://localhost:5173',
+      REGISTRATION_ENABLED: 'false',
+    });
+    const { app, userStore } = setup({ env: disabledEnv });
+    const res = await request(app).post('/api/auth/register').set(H).send(newUser);
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('registration_closed');
+    expect(res.body.error.message).toBe('Registration is currently closed.');
+    expect(userStore.users.size).toBe(0);
   });
 
   it('rejects state-changing requests without the X-Requested-By header', async () => {

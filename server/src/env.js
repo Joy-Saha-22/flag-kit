@@ -40,6 +40,9 @@ export function parseOrigins(value) {
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
+  SERVE_CLIENT: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
+  CLIENT_DIST_DIR: z.string().default('client/dist'),
+  REGISTRATION_ENABLED: z.enum(['true', 'false']).default('true').transform((value) => value === 'true'),
   MONGODB_URI: z
     .string()
     .min(1, 'MONGODB_URI is required')

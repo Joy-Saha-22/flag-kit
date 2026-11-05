@@ -15,7 +15,9 @@ export const mongoSdkStore = {
     if (!/^[a-f0-9]{64}$/.test(keyHash)) {
       return null;
     }
-    const env = await Environment.findOne({ 'sdkKeys.keyHash': keyHash }).select('projectId key sdkKeys').lean();
+    const env = await Environment.findOne({ 'sdkKeys.keyHash': keyHash })
+      .select('projectId key sdkKeys')
+      .lean();
     if (!env) {
       return null;
     }

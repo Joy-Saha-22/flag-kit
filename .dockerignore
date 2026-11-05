@@ -13,10 +13,8 @@
 server/tests
 server/scripts
 server/benchmarks
-client/src
 client/tests
 client/dist
-sdk/src
 sdk/tests
 sdk/examples
 packages/evaluator/tests

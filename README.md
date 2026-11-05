@@ -186,21 +186,38 @@ Rate limits use Redis-backed fixed windows. A Redis Lua script atomically increm
 
 Other server defaults include `JWT_TTL_SECONDS=28800` (60–2,592,000), `BCRYPT_COST=12` (4–15), and `RULESET_CACHE_TTL_SECONDS=3600` (60–604,800). `CORS_ORIGINS` defaults to the local Vite development origin and accepts comma-separated HTTP(S) origins without paths or wildcards.
 
-## Docker
+## Deploying
 
-Build the API image from the repository root:
+The single-container image serves both the dashboard and API. MongoDB and Redis remain external services. Configure these required server variables at runtime; replace each placeholder with a real private value:
 
-```sh
-docker build -t flagkit-api .
+```dotenv
+MONGODB_URI=mongodb://<user>:<password>@<host>:27017/<database>?authSource=admin
+REDIS_URL=redis://:<password>@<host>:6379
+JWT_SECRET=<private-secret-at-least-32-characters>
 ```
 
-Run it with runtime configuration from an environment file:
+Set `NODE_ENV=production` and `REGISTRATION_ENABLED=false` to prevent public signups. Set `TRUST_PROXY` to the number of trusted reverse-proxy hops in front of the container (default `0`); do not increase it unless the proxy chain is configured and trusted. The image enables dashboard serving with `SERVE_CLIENT=true`. `CLIENT_DIST_DIR` defaults to `client/dist`. `VITE_DEMO_CLIENT_SDK_KEY` is an optional public client SDK key that can be supplied at build time for the SDK Demo page; do not pass secrets as build arguments.
+
+Build the image from the repository root:
 
 ```sh
-docker run --rm -p 3000:3000 --env-file .env flagkit-api
+docker build -t flagkit .
 ```
 
-The MongoDB and Redis URLs in that environment file must resolve from inside the container. The image sets `NODE_ENV=production`, runs as the non-root `node` user, and does not include `.env`; supply secrets and connection strings at run time. Its Docker `HEALTHCHECK` requests the container's `/healthz` endpoint and treats a successful HTTP response as healthy; that endpoint does not check MongoDB or Redis connectivity.
+Run it with runtime-only configuration (the database and Redis hosts must be reachable from the container):
+
+```sh
+docker run --rm -p 3000:3000 \
+  -e NODE_ENV=production \
+  -e MONGODB_URI='mongodb://<user>:<password>@<host>:27017/<database>?authSource=admin' \
+  -e REDIS_URL='redis://:<password>@<host>:6379' \
+  -e JWT_SECRET='<private-secret-at-least-32-characters>' \
+  -e TRUST_PROXY=0 \
+  -e REGISTRATION_ENABLED=false \
+  flagkit
+```
+
+The image runs as the non-root `node` user and includes a Docker `HEALTHCHECK` that requests `/healthz` every 30 seconds. A successful response means the API process is responsive; it does not verify MongoDB or Redis connectivity. The dashboard, API, and health check are available on port `3000` by default.
 
 ## Benchmarks
 
@@ -263,6 +280,7 @@ The server uses SSE for server-to-SDK ruleset updates, while SDK requests and ev
 ## Known limitations
 
 - Registration is open: the server has no `REGISTRATION_ENABLED` setting. The auth routes do not provide password reset or email verification.
+- Project member management is not available in the dashboard. Adding collaborators currently requires manually updating the project's `members` array in MongoDB. There is no in-app invitation or role-assignment workflow.
 - The per-email auth rate limit applies to login and registration across IPs. An attacker can consume a victim's email-tier allowance and temporarily throttle those requests.
 - Anyone holding a client SDK key can submit fabricated, valid-shaped exposure and conversion events for arbitrary user keys. Accepted events can affect experiment results; client telemetry is not proof of user activity.
 - Client SDK keys expose the complete targeting rules for their environment; rule values must not contain secrets.
@@ -281,7 +299,3 @@ packages/evaluator/   Shared flag targeting and rollout evaluator
 sdk/                  JavaScript SDK
 server/               Express API, persistence, and server tests
 ```
-
-## Screenshots
-
-Add real screenshots of the running dashboard here.

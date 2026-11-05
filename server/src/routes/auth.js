@@ -45,6 +45,14 @@ export function createAuthRouter({ env, userStore, rateLimits = {} }) {
     validate({ body: registerSchema }),
     authEmail,
     asyncHandler(async (req, res) => {
+      if (!env.REGISTRATION_ENABLED) {
+        throw new AppError(
+          403,
+          'registration_closed',
+          'Registration is currently closed.'
+        );
+      }
+
       const { email, password, name } = req.valid.body;
       const existing = await userStore.findByEmail(email);
       if (existing) {

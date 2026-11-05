@@ -10,7 +10,7 @@ export default function LoginPage() {
   return (
     <div className="page">
       <div className="panel auth-panel">
-        <h1>Sign in</h1>
+        <h1 className='text-3xl'>Sign In</h1>
         <Form method="post" className="stack">
           <Input label="Email" name="email" type="email" autoComplete="email" required />
           <Input label="Password" name="password" type="password" autoComplete="current-password" required />

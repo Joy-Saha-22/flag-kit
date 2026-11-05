@@ -1,4 +1,6 @@
 import express, { Router } from 'express';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import helmet from 'helmet';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
@@ -22,6 +24,8 @@ import { createSdkAuth } from './sdk/auth.js';
 import { createRulesetLoader } from './sdk/rulesetLoader.js';
 import { createSdkSchemas } from './sdk/schemas.js';
 import { createStreamHub } from './sdk/streamHub.js';
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 /**
  * Build the Express app. It does not connect to anything: stores and the Redis
@@ -134,6 +138,44 @@ export function createApp({
       logger,
     }),
   );
+
+  if (env.SERVE_CLIENT) {
+    const clientDist = path.resolve(repoRoot, env.CLIENT_DIST_DIR || 'client/dist');
+    const indexPath = path.join(clientDist, 'index.html');
+    const serveStatic = express.static(clientDist, {
+      index: false,
+      setHeaders: (res, filePath) => {
+        if (path.basename(filePath) === 'index.html') {
+          res.setHeader('Cache-Control', 'no-cache');
+        } else if (filePath.includes(`${path.sep}assets${path.sep}`) && /-[A-Za-z0-9_-]{8,}\./.test(path.basename(filePath))) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      },
+    });
+    app.use((req, res, next) => {
+      if (req.path.startsWith('/api') || req.path.startsWith('/sdk') || req.path.startsWith('/healthz')) {
+        return next();
+      }
+      return serveStatic(req, res, next);
+    });
+    app.use((req, res, next) => {
+      if (
+        req.method !== 'GET' ||
+        !req.accepts('html') ||
+        req.path.startsWith('/api') ||
+        req.path.startsWith('/sdk') ||
+        req.path.startsWith('/healthz')
+      ) {
+        return next();
+      }
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.sendFile(indexPath, (error) => {
+        if (error) {
+          next(error);
+        }
+      });
+    });
+  }
 
   app.use((req, res, next) => {
     next(new AppError(404, 'not_found', 'Not found.'));
