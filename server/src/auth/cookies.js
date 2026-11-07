@@ -1,10 +1,11 @@
 export const SESSION_COOKIE = 'fk_session';
 
 function baseOptions(env) {
+  const isProduction = env.NODE_ENV === 'production';
   return {
     httpOnly: true,
-    sameSite: 'lax',
-    secure: env.NODE_ENV === 'production',
+    sameSite: isProduction ? 'none' : 'lax',
+    secure: isProduction,
     path: '/',
   };
 }
