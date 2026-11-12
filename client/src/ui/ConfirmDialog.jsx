@@ -4,11 +4,11 @@ export default function ConfirmDialog({ open, onOpenChange, title, description, 
   return (
     <AlertDialog.Root open={open} onOpenChange={onOpenChange}>
       <AlertDialog.Portal>
-        <AlertDialog.Overlay style={{ position: 'fixed', inset: 0, background: 'rgba(28, 28, 26, 0.25)' }} />
-        <AlertDialog.Content style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+        <AlertDialog.Overlay className="dialog-overlay" />
+        <AlertDialog.Content className="dialog-content">
           <div className="modal-card">
-            <AlertDialog.Title style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>{title}</AlertDialog.Title>
-            {description ? <AlertDialog.Description style={{ marginTop: 8, color: '#5C5A55' }}>{description}</AlertDialog.Description> : null}
+            <AlertDialog.Title className="dialog-title">{title}</AlertDialog.Title>
+            {description ? <AlertDialog.Description className="dialog-description">{description}</AlertDialog.Description> : null}
             {children ? <div className="confirm-dialog-content">{children}</div> : null}
             <div className="dialog-actions">
               <AlertDialog.Cancel asChild>

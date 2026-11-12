@@ -19,19 +19,23 @@ export default function AppLayout() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand">FlagKit</div>
-        <nav className="nav-list">
+        <div className="brand">
+          <span className="brand-mark" aria-hidden="true">F</span>
+          <span>FlagKit</span>
+        </div>
+        <div className="sidebar-section-label">Workspace</div>
+        <nav className="nav-list" aria-label="Workspace navigation">
           <NavLink className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} to={`/p/${project.id}/flags${location.search}`}>
             Flags
           </NavLink>
           <NavLink className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} to={`/p/${project.id}/sdk-keys${location.search}`}>
-            SDK Keys
+            SDK keys
           </NavLink>
           <NavLink className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} to={`/p/${project.id}/audit${location.search}`}>
-            Audit Log
+            Audit log
           </NavLink>
           <NavLink className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} to="/demo">
-            SDK Demo
+            SDK demo
           </NavLink>
         </nav>
       </aside>
@@ -39,7 +43,7 @@ export default function AppLayout() {
       <div className="main-panel">
         <header className="topbar">
           <div className="toolbar-group">
-            <select className="selector" value={project.id} onChange={(event) => navigate(`/p/${event.target.value}/flags${location.search}`)} aria-label="Project">
+            <select className="selector project-selector" value={project.id} onChange={(event) => navigate(`/p/${event.target.value}/flags${location.search}`)} aria-label="Project">
               {auth.projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
             <label className="environment-switcher">

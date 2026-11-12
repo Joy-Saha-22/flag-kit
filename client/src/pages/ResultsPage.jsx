@@ -86,24 +86,23 @@ export default function ResultsPage() {
             <div className="results-chart">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 8, right: 16, bottom: 8, left: 8 }}>
-                  <CartesianGrid stroke="#D3D0C6" vertical={false} />
-                  <XAxis dataKey="key" tick={{ fill: '#1C1C1A', fontSize: 12 }} />
+                  <CartesianGrid stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="key" tick={{ fill: 'var(--text)', fontSize: 12 }} />
                   <YAxis
                     width={58}
-                    tick={{ fill: '#5C5A55', fontSize: 12 }}
+                    tick={{ fill: 'var(--muted)', fontSize: 12 }}
                     tickFormatter={(value) => `${Number(value).toFixed(0)}%`}
                   />
                   <Tooltip
                     formatter={(value) => [`${Number(value).toFixed(2)}%`, 'Conversion rate']}
                     contentStyle={{
-                      backgroundColor: '#F3F2EE',
-                      border: '1px solid #D3D0C6',
-                      borderRadius: 2,
-                      boxShadow: 'none',
-                      color: '#1C1C1A',
+                      backgroundColor: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 4,
+                      color: 'var(--text)',
                     }}
                   />
-                  <Bar dataKey="rate" fill="#1F5F5B" isAnimationActive={false} />
+                  <Bar dataKey="rate" fill="var(--accent)" isAnimationActive={false} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

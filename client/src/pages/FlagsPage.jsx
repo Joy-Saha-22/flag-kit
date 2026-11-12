@@ -48,6 +48,14 @@ export default function FlagsPage() {
 
   return (
     <div className="page">
+      <header className="page-heading flags-heading">
+        <div>
+          <h1>Feature flags</h1>
+          <p className="text-muted">Manage releases and targeting for this project.</p>
+        </div>
+        {canEdit ? <Button variant="primary" onClick={() => setDialogOpen(true)}>New flag</Button> : null}
+      </header>
+
       <div className="stack">
         <div className="inline-row list-toolbar">
           <Form method="get" className="inline-row">
@@ -61,7 +69,6 @@ export default function FlagsPage() {
             {env !== 'prod' ? <input type="hidden" name="env" value={env} /> : null}
             <Button type="submit">Filter</Button>
           </Form>
-          {canEdit ? <Button variant="primary" onClick={() => setDialogOpen(true)}>New flag</Button> : null}
         </div>
 
         {actionError ? (
